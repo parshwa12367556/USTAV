@@ -1,0 +1,18 @@
+export const routePaths = {
+  home: '/',
+  publicHome: '/home',
+  login: '/login',
+  register: '/register',
+  dashboard: '/dashboard',
+  events: '/events',
+  eventDetails: '/events/:eventId',
+  guests: '/guests',
+  invitations: '/invitations',
+  vendors: '/vendors',
+  venues: '/venues',
+  budget: '/budget',
+  bookings: '/bookings',
+  admin: '/admin',
+  vendor: '/vendor',
+  invite: '/invite/:token',
+} as const;

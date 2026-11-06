@@ -1,24 +1,14 @@
+import type { ImgHTMLAttributes } from 'react';
 
-import * as React from "react";
-import { cn } from "@/utils/cn";
-import { initials } from "@/utils/format";
-
-interface AvatarProps extends React.HTMLAttributes<HTMLDivElement> {
+type AvatarProps = Omit<ImgHTMLAttributes<HTMLImageElement>, 'src' | 'alt'> & {
   src?: string;
-  name?: string;
-  size?: "sm" | "md" | "lg";
+  name: string;
+  size?: number;
+};
+
+export function Avatar({ src, name, size = 40, className = '', ...props }: AvatarProps) {
+  const initials = name.trim().split(/\s+/).slice(0, 2).map((part) => part[0]?.toUpperCase()).join('');
+  return src
+    ? <img {...props} className={`avatar ${className}`} src={src} alt={name} width={size} height={size} style={{ borderRadius: '50%', objectFit: 'cover', ...props.style }} />
+    : <span aria-label={name} className={`avatar avatar--fallback ${className}`} style={{ width: size, height: size, display: 'inline-grid', placeItems: 'center', borderRadius: '50%' }}>{initials || '?'}</span>;
 }
-
-export const Avatar = React.forwardRef<HTMLDivElement, AvatarProps>(
-  ({ className, src, name, size = "md", ...props }, ref) => {
-    const sizes = { sm: "h-8 w-8 text-xs", md: "h-10 w-10 text-sm", lg: "h-12 w-12 text-base" };
-    return (
-      <div ref={ref} className={cn("relative flex shrink-0 items-center justify-center rounded-full overflow-hidden", sizes[size], className)} {...props}>
-        {src ? <img src={src} alt={name || ""} className="aspect-square h-full w-full object-cover" /> : null}
-        {!src && name && <span className="text-foreground">{initials(name)}</span>}
-      </div>
-    );
-  }
-);
-Avatar.displayName = "Avatar";
-
