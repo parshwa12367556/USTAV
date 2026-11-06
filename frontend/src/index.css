@@ -1,0 +1,107 @@
+
+/* ==========================================================================
+   UTSAV — Design System & Brand Tokens
+   Every Celebration, One Place.
+   ========================================================================== */
+
+/* Brand color palette (Indian wedding luxury aesthetic) */
+:root {
+  /* Primary — Burgundy */
+  --primary: #7A2338;
+  --primary-foreground: #FFFFFF;
+  --primary-hover: #541729;
+
+  /* Deep burgundy — used for elevated surfaces / footers */
+  --deep-burgundy: #541729;
+
+  /* Gold — premium accents (used sparingly) */
+  --gold: #C7A15A;
+  --gold-foreground: #282326;
+  --gold-hover: #B48E40;
+
+  /* Soft ivory — page background */
+  --background: #FAF7F2;
+  --foreground: #282326;
+
+  --secondary: #EAE4E0;
+  --secondary-foreground: #282326;
+
+  --muted: #EAE4E0;
+  --muted-foreground: #777078;
+
+  --accent: #C7A15A;
+  --accent-foreground: #282326;
+
+  --destructive: #D9534F;
+  --destructive-foreground: #FFFFFF;
+
+  --success: #21865B;
+  --success-foreground: #FFFFFF;
+
+  --warning: #D99A35;
+  --warning-foreground: #282326;
+
+  --border: #EAE4E0;
+  --input: #EAE4E0;
+  --ring: #C7A15A;
+
+  --card: #FFFFFF;
+  --card-foreground: #282326;
+
+  --radius: 0.75rem;
+
+  /* Shadows */
+  --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+  --shadow: 0 1px 3px 0 rgb(0 0 0 / 0.08), 0 1px 2px -1px rgb(0 0 0 / 0.06);
+  --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.08), 0 2px 4px -2px rgb(0 0 0 / 0.06);
+  --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.07), 0 4px 6px -4px rgb(0 0 0 / 0.05);
+
+  --font-sans: "Inter", sans-serif;
+  --font-serif: "Playfair Display", serif;
+}
+
+.dark {
+  --background: #1B1618;
+  --foreground: #FAF7F2;
+  --muted: #332D30;
+  --muted-foreground: #A69CA5;
+  --border: #332D30;
+  --input: #332D30;
+  --card: #231E21;
+  --card-foreground: #FAF7F2;
+}
+
+@layer base {
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html { scroll-behavior: smooth; }
+  body {
+    background-color: var(--background);
+    color: var(--foreground);
+    font-family: var(--font-sans);
+    font-size: 1rem;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+  h1,h2,h3,h4,h5,h6 {
+    font-family: var(--font-serif);
+    color: var(--foreground);
+    font-weight: 600;
+    line-height: 1.25;
+  }
+  h1{font-size:2.5rem;} h2{font-size:2rem;} h3{font-size:1.625rem;}
+  h4{font-size:1.375rem;} h5{font-size:1.125rem;} h6{font-size:1rem;}
+  a { color: var(--primary); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  input,button,select,textarea { font-family: inherit; font-size: inherit; }
+  button { cursor: pointer; background: transparent; border: none; color: inherit; }
+  button:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+}
+
+@layer utilities {
+  .text-balance { text-wrap: balance; }
+  .line-clamp-2 { display:-webkit-box; -webkit-box-orient:vertical; -webkit-line-clamp:2; overflow:hidden; }
+  .line-clamp-3 { display:-webkit-box; -webkit-box-orient:vertical; -webkit-line-clamp:3; overflow:hidden; }
+}
+
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Playfair+Display:ital,wght@0,400;0,500;0,600;0,700;1,400&display=swap");
+
