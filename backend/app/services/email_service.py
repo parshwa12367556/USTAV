@@ -1,4 +1,3 @@
-import logging
 import smtplib
 from email.message import EmailMessage
 
@@ -6,13 +5,11 @@ from flask import current_app
 
 from app.core.exceptions import ServiceUnavailable
 
-logger = logging.getLogger(__name__)
-
 
 def send_verification_code(recipient: str, code: str) -> None:
     mode = current_app.config["OTP_DELIVERY_MODE"]
     if mode == "console" and current_app.config["DEBUG"]:
-        logger.info("Development verification code for %s: %s", recipient, code)
+        current_app.logger.info("Development verification code for %s: %s", recipient, code)
         return
     if mode != "smtp":
         raise ServiceUnavailable("Email delivery is not configured. Contact the administrator.")
@@ -40,5 +37,5 @@ def send_verification_code(recipient: str, code: str) -> None:
                 smtp.login(username, password)
             smtp.send_message(message)
     except (OSError, smtplib.SMTPException) as error:
-        logger.exception("Could not send verification email to %s", recipient)
+        current_app.logger.exception("Could not send verification email to %s", recipient)
         raise ServiceUnavailable("Verification email could not be sent. Please try again later.") from error

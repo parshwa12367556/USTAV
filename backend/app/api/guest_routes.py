@@ -3,12 +3,13 @@ from secrets import token_urlsafe
 
 from flask import Blueprint, current_app, request
 from flask_jwt_extended import get_jwt_identity, jwt_required
+from marshmallow import Schema, ValidationError, fields, validate
 from werkzeug.datastructures import FileStorage
 
 from app.core.exceptions import ApiError
 from app.extensions import db
-from app.models.event import Event
-from app.models.guest import Guest, GuestGroup
+from app.models.event import Event, Function
+from app.models.guest import Guest, GuestFunctionMapping, GuestGroup
 from app.schemas.guest_schema import GuestGroupSchema, GuestSchema
 from app.services.workspace_service import require_event_permission
 from app.utils.csv_parser import parse_guest_csv
@@ -16,6 +17,17 @@ from app.utils.csv_parser import parse_guest_csv
 guest_bp = Blueprint("guests", __name__)
 guest_schema = GuestSchema()
 guest_group_schema = GuestGroupSchema()
+
+
+class GuestFunctionsSchema(Schema):
+    functionIds = fields.List(
+        fields.String(),
+        required=True,
+        validate=validate.Length(min=1, max=100),
+    )
+
+
+guest_functions_schema = GuestFunctionsSchema()
 
 
 def _owned_event(event_id: str, permission: str = "guest.view") -> Event:
@@ -197,6 +209,50 @@ def update_guest(guest_id: str):
             setattr(guest, key, value.strip() if isinstance(value, str) else value)
     db.session.commit()
     return guest.to_dict()
+
+
+@guest_bp.get("/guests/<guest_id>/functions")
+@jwt_required()
+def list_guest_functions(guest_id: str):
+    guest = db.session.get(Guest, guest_id)
+    if guest is None:
+        raise ApiError("Guest not found.", 404)
+    require_event_permission(get_jwt_identity(), guest.event, "guest.view")
+    function_ids = [mapping.function_id for mapping in guest.function_mappings]
+    if not function_ids:
+        function_ids = [function.id for function in guest.event.functions]
+    return {"functionIds": function_ids}
+
+
+@guest_bp.put("/guests/<guest_id>/functions")
+@jwt_required()
+def update_guest_functions(guest_id: str):
+    guest = db.session.get(Guest, guest_id)
+    if guest is None:
+        raise ApiError("Guest not found.", 404)
+    require_event_permission(get_jwt_identity(), guest.event, "guest.update")
+    function_ids = guest_functions_schema.load(request.get_json(silent=True) or {})["functionIds"]
+    if len(function_ids) != len(set(function_ids)):
+        raise ValidationError({"functionIds": ["A function can only be selected once."]})
+
+    functions = db.session.scalars(
+        db.select(Function).where(
+            Function.event_id == guest.event_id,
+            Function.id.in_(function_ids),
+        )
+    ).all()
+    if len(functions) != len(function_ids):
+        raise ValidationError({"functionIds": ["Every selected function must belong to this event."]})
+
+    db.session.execute(
+        db.delete(GuestFunctionMapping).where(GuestFunctionMapping.guest_id == guest.id)
+    )
+    db.session.add_all(
+        GuestFunctionMapping(guest_id=guest.id, function_id=function.id)
+        for function in functions
+    )
+    db.session.commit()
+    return {"functionIds": [function.id for function in functions]}
 
 
 @guest_bp.delete("/guests/<guest_id>")

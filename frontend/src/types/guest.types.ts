@@ -11,4 +11,5 @@ export type Guest = {
   plusOnes?: number;
   invitationToken?: string;
   invitationExpiresAt?: string;
+  invitedFunctionIds?: string[];
 };

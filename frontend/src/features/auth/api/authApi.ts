@@ -13,9 +13,9 @@ export const authApi = {
     const response = await apiClient.post<AuthSession>('/auth/verify-otp', { email, code });
     return response.data;
   },
-  async me(): Promise<AuthUser> {
-    const response = await apiClient.get<{ user: AuthUser }>('/auth/me');
-    return response.data.user;
+  async me(): Promise<AuthSession> {
+    const response = await apiClient.get<AuthSession>('/auth/me');
+    return response.data;
   },
   async requestPasswordReset(email: string): Promise<void> {
     await apiClient.post('/auth/password-reset/request', { email });

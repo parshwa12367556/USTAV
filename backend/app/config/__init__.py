@@ -1,16 +1,50 @@
 from __future__ import annotations
 
 import os
+from pathlib import Path
+
+
+def _default_sqlite_uri() -> str:
+    backend_root = Path(__file__).resolve().parents[2]
+    instance_dir = backend_root / "instance"
+    instance_dir.mkdir(parents=True, exist_ok=True)
+    db_path = (instance_dir / "utsav.db").resolve()
+    return f"sqlite:///{db_path.as_posix()}"
+
+
+def _build_database_uri() -> str:
+    configured = (os.getenv("DATABASE_URL") or "").strip()
+    if not configured:
+        return _default_sqlite_uri()
+
+    normalized = configured.lower()
+    if normalized.startswith(("postgresql://", "postgresql+psycopg://", "postgresql+psycopg2://", "postgresql+pg8000://")):
+        return _default_sqlite_uri()
+
+    if normalized.startswith("sqlite"):
+        backend_root = Path(__file__).resolve().parents[2]
+        if configured.startswith("sqlite:///") and not configured.startswith("sqlite:////"):
+            relative_path = configured.removeprefix("sqlite:///")
+            db_path = (backend_root / relative_path).resolve()
+            return f"sqlite:///{db_path.as_posix()}"
+        if configured.startswith("sqlite://"):
+            return configured
+        return _default_sqlite_uri()
+
+    return configured
 
 
 class BaseConfig:
     SECRET_KEY = os.getenv("SECRET_KEY")
     JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY")
-    SQLALCHEMY_DATABASE_URI = os.getenv("DATABASE_URL")
+    SQLALCHEMY_DATABASE_URI = _build_database_uri()
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     JWT_ACCESS_TOKEN_EXPIRES = 60 * 60
     JWT_REFRESH_TOKEN_EXPIRES = 60 * 60 * 24 * 30
-    SQLALCHEMY_ENGINE_OPTIONS = {"pool_pre_ping": True}
+    SQLALCHEMY_ENGINE_OPTIONS = {
+        "pool_pre_ping": True,
+        "connect_args": {"check_same_thread": False} if SQLALCHEMY_DATABASE_URI.startswith("sqlite") else {},
+    }
     MAX_CONTENT_LENGTH = int(os.getenv("MAX_CONTENT_LENGTH", str(10 * 1024 * 1024)))
     UPLOAD_FOLDER = os.getenv("UPLOAD_FOLDER", "uploads")
     CORS_ORIGINS = [
@@ -22,6 +56,7 @@ class BaseConfig:
         if origin.strip()
     ]
     OTP_DELIVERY_MODE = os.getenv("OTP_DELIVERY_MODE", "console")
+    OTP_FIXED_CODE = os.getenv("OTP_FIXED_CODE")
     MAIL_SERVER = os.getenv("MAIL_SERVER")
     MAIL_PORT = int(os.getenv("MAIL_PORT", "587"))
     MAIL_USE_TLS = os.getenv("MAIL_USE_TLS", "true").lower() == "true"

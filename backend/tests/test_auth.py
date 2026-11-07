@@ -36,6 +36,37 @@ def test_registration_verification_and_login(client, monkeypatch):
     assert login.json["user"]["role"] == "family"
 
 
+def test_fixed_registration_code_works_only_in_debug_console_mode(client, app, monkeypatch):
+    verification_codes = []
+    monkeypatch.setattr(
+        "app.services.auth_service.send_verification_code",
+        lambda email, code: verification_codes.append(code),
+    )
+    app.config.update(DEBUG=True, OTP_DELIVERY_MODE="console", OTP_FIXED_CODE="987654")
+
+    response = client.post(
+        "/api/v1/auth/register",
+        json={
+            "name": "Fixed Code Family",
+            "email": "fixed-code@example.com",
+            "password": "secure-password-123",
+        },
+    )
+    assert response.status_code == 201
+    assert verification_codes == ["987654"]
+    verification = client.post(
+        "/api/v1/auth/verify-otp",
+        json={"email": "fixed-code@example.com", "code": "987654"},
+    )
+    assert verification.status_code == 200
+
+    app.config.update(DEBUG=False)
+    with app.app_context():
+        from app.services.auth_service import _generate_verification_code
+
+        assert _generate_verification_code() != "987654"
+
+
 def test_login_rejects_unverified_account(client):
     client.post(
         "/api/v1/auth/register",
@@ -171,3 +202,12 @@ def test_smtp_delivery_uses_configured_expiry_and_tls(app, monkeypatch):
     message = next(item for item in sent if not isinstance(item, str) and not isinstance(item, tuple))
     assert message["To"] == "family@example.test"
     assert "17 minutes" in message.get_content()
+
+
+def test_console_delivery_logs_development_verification_code(app, caplog):
+    with app.app_context():
+        from app.services.email_service import send_verification_code
+
+        send_verification_code("family@example.test", "123456")
+
+    assert "Development verification code for family@example.test: 123456" in caplog.text

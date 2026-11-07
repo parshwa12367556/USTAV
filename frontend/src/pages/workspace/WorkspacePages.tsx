@@ -1,12 +1,13 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { useNavigate, useOutletContext, useParams, useSearchParams } from 'react-router-dom';
 import { isAxiosError } from 'axios';
-import { formatCurrency, formatDate, guests, initialTasks } from '../../data/workspaceData';
+import { formatCurrency, formatDate, initialTasks } from '../../data/workspaceData';
 import { Icon } from '../../layouts/WorkspaceLayout';
 import type { EventRecord, GuestRecord } from '../../types/workspace.types';
 import { usePersistentState } from '../../hooks/usePersistentState';
 import { guestsApi } from '../../features/guests/api/guestsApi';
 import { guestGroupsApi, type GuestGroup } from '../../features/guests/api/guestGroupsApi';
+import { AssignFunctionsModal } from '../../features/guests/components/AssignFunctionsModal';
 import type { Guest } from '../../types/guest.types';
 import { bookingsApi } from '../../features/bookings/api/bookingsApi';
 import type { Booking } from '../../types/booking.types';
@@ -209,18 +210,36 @@ function isTaskList(value: unknown): value is typeof initialTasks {
 
 export function DashboardPage() {
   const { events, openCreateEvent } = useWorkspace();
+  const { user, isAuthenticated } = useAuth();
   const navigate = useNavigate();
   const [tasks, setTasks, taskStorageError] = usePersistentState('utsav-planning-tasks', initialTasks, isTaskList);
+  const [confirmedGuests, setConfirmedGuests] = useState(0);
   const activeEvent = events[0];
   const totalBudget = events.reduce((sum, event) => sum + event.budget, 0);
   const totalSpent = events.reduce((sum, event) => sum + event.spent, 0);
-  const confirmedGuests = guests.filter((guest) => guest.status === 'Confirmed').length;
   const completedTasks = tasks.filter((task) => task.done).length;
+  const firstName = user?.name?.trim().split(/\s+/).filter(Boolean)[0] ?? 'there';
+
+  useEffect(() => {
+    if (!isAuthenticated || !activeEvent) {
+      setConfirmedGuests(0);
+      return;
+    }
+    let active = true;
+    guestsApi.list(activeEvent.id)
+      .then((result) => {
+        if (active) setConfirmedGuests(result.filter((guest) => guest.rsvpStatus === 'attending').length);
+      })
+      .catch(() => {
+        if (active) setConfirmedGuests(0);
+      });
+    return () => { active = false; };
+  }, [activeEvent?.id, isAuthenticated]);
 
   return (
     <div className="dashboard-page">
       <section className="welcome-row">
-        <div><h2>Good morning, Priya <span className="wave">✦</span></h2><p>Big moments are made of little details. You’re doing wonderfully.</p></div>
+        <div><h2>Good morning, {firstName} <span className="wave">✦</span></h2><p>Big moments are made of little details. You’re doing wonderfully.</p></div>
         <span className="welcome-note">Your next celebration is in <strong>39 days</strong></span>
       </section>
 
@@ -562,18 +581,23 @@ export function GuestsPage() {
   const { events, isAuthenticated } = useWorkspace();
   const [query, setQuery] = useState('');
   const [status, setStatus] = useState('Everyone');
-  const [guestList, setGuestList] = useState<GuestRecord[]>(guests);
+  const [guestList, setGuestList] = useState<GuestRecord[]>([]);
   const [guestModalOpen, setGuestModalOpen] = useState(false);
   const [editingGuest, setEditingGuest] = useState<GuestRecord | null>(null);
   const [guestLoading, setGuestLoading] = useState(false);
   const [guestError, setGuestError] = useState('');
   const [guestNotice, setGuestNotice] = useState('');
   const [importingGuests, setImportingGuests] = useState(false);
+  const [eventFunctions, setEventFunctions] = useState<EventFunction[]>([]);
+  const [assigningGuest, setAssigningGuest] = useState<GuestRecord | null>(null);
+  const [selectedFunctionIds, setSelectedFunctionIds] = useState<string[]>([]);
+  const [savingFunctionAssignment, setSavingFunctionAssignment] = useState(false);
+  const [functionAssignmentError, setFunctionAssignmentError] = useState('');
   const activeEvent = events[0];
 
   useEffect(() => {
     if (!isAuthenticated) {
-      setGuestList(guests);
+      setGuestList([]);
       setGuestError('');
       return;
     }
@@ -596,6 +620,24 @@ export function GuestsPage() {
       })
       .finally(() => {
         if (active) setGuestLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [activeEvent?.id, isAuthenticated]);
+
+  useEffect(() => {
+    if (!isAuthenticated || !activeEvent) {
+      setEventFunctions([]);
+      return;
+    }
+    let active = true;
+    functionsApi.list(activeEvent.id)
+      .then((result) => {
+        if (active) setEventFunctions(result);
+      })
+      .catch((cause: unknown) => {
+        if (active) setGuestError(cause instanceof Error ? cause.message : 'Unable to load event functions.');
       });
     return () => {
       active = false;
@@ -653,6 +695,29 @@ export function GuestsPage() {
       setGuestError(cause instanceof Error ? cause.message : 'Unable to copy the invitation link.');
     }
   };
+  const openFunctionAssignment = (guest: GuestRecord) => {
+    setGuestError('');
+    setFunctionAssignmentError('');
+    setSelectedFunctionIds(guest.invitedFunctionIds ?? eventFunctions.map((item) => item.id));
+    setAssigningGuest(guest);
+  };
+  const saveFunctionAssignment = async () => {
+    if (!assigningGuest?.id) return;
+    setSavingFunctionAssignment(true);
+    setFunctionAssignmentError('');
+    try {
+      const invitedFunctionIds = await guestsApi.assignFunctions(assigningGuest.id, selectedFunctionIds);
+      setGuestList((current) => current.map((item) =>
+        item.id === assigningGuest.id ? { ...item, invitedFunctionIds } : item,
+      ));
+      setAssigningGuest(null);
+      setGuestNotice(`Invitation functions updated for ${assigningGuest.name}.`);
+    } catch (cause) {
+      setFunctionAssignmentError(cause instanceof Error ? cause.message : 'Unable to update invitation functions.');
+    } finally {
+      setSavingFunctionAssignment(false);
+    }
+  };
   const importGuests = async (file: File | undefined) => {
     if (!file) return;
     if (!isAuthenticated || !activeEvent) {
@@ -695,7 +760,7 @@ export function GuestsPage() {
         <div className="guest-summary guest-summary--total"><span>ON YOUR LIST</span><strong>{guestList.length}</strong><small>A wonderful gathering</small><span className="summary-decoration">✿</span></div>
         <div className="guest-summary"><span>CAN’T WAIT TO SEE YOU</span><strong>{confirmed}</strong><small>Kindly said yes</small><span className="mini-avatars"><i>AS</i><i>RM</i><i>AK</i><b>+{confirmed}</b></span></div>
         <div className="guest-summary"><span>STILL THINKING IT OVER</span><strong>{pending}</strong><small>A gentle reminder might help</small><span className="summary-mini-link">Send a reminder →</span></div>
-        <div className="guest-summary"><span>YOUR CELEBRATION</span><strong>18 <small>Dec</small></strong><small>Aarav & Meera’s wedding</small><span className="summary-calendar">2026</span></div>
+        <div className="guest-summary"><span>YOUR CELEBRATION</span><strong>{activeEvent ? formatDate(activeEvent.date).split(' ').slice(0, 2).join(' ') : 'Add'}<small>{activeEvent ? activeEvent.date.slice(0, 4) : 'date'}</small></strong><small>{activeEvent ? activeEvent.name : 'Create a celebration'}</small><span className="summary-calendar">{activeEvent ? new Date(`${activeEvent.date}T00:00:00`).getFullYear() : '—'}</span></div>
       </section>
       <section className="content-card guest-list-card">
         {guestError && <p className="form-error" role="alert">{guestError}</p>}
@@ -706,12 +771,23 @@ export function GuestsPage() {
         <div className="guest-tools"><div className="inline-search"><Icon name="search" size={17} /><input placeholder="Find someone by name or email" value={query} onChange={(event) => setQuery(event.target.value)} /></div><div className="filter-tabs">{['Everyone', 'Confirmed', 'Maybe', 'Pending', 'Declined'].map((item) => <button key={item} className={status === item ? 'filter-tab filter-tab--active' : 'filter-tab'} onClick={() => setStatus(item)}>{item}</button>)}</div>{isAuthenticated && <label className="button button--outline">↑ <span>{importingGuests ? 'Importing…' : 'Import CSV'}</span><input type="file" accept=".csv,text/csv" disabled={importingGuests || !activeEvent} onChange={(event) => { void importGuests(event.currentTarget.files?.[0]); event.currentTarget.value = ''; }} hidden /></label>}<button className="button button--outline" onClick={exportGuestList}>↓ <span>Export list</span></button></div>
         <div className="guest-table">
           <div className="guest-table-row guest-table-header"><span>GUEST</span><span>GROUP</span><span>EMAIL ADDRESS</span><span>RSVP</span><span /></div>
-          {results.map((guest, index) => <div className="guest-table-row" key={guest.id ?? guest.email ?? guest.name}><div className="guest-name"><span className={`avatar avatar--guest avatar--guest-${index % 4}`}>{guest.name.split(' ').map((part) => part[0]).slice(0, 2).join('')}</span><strong>{guest.name}</strong></div><span className="table-secondary">{guest.group}</span><span className="table-secondary">{guest.email}</span><StatusPill status={guest.status} /><div className="guest-row-actions">{guest.id && <><button className="plain-icon" aria-label={`Edit ${guest.name}`} onClick={() => { setEditingGuest(guest); setGuestModalOpen(true); }}>Edit</button><button className="plain-icon" aria-label={`Copy invitation link for ${guest.name}`} onClick={() => void shareGuestInvitation(guest)}>Link</button><button className="plain-icon" aria-label={`Renew invitation link for ${guest.name}`} onClick={() => void shareGuestInvitation(guest, true)}>Renew</button><button className="plain-icon" aria-label={`Remove ${guest.name}`} onClick={() => void removeGuest(guest)}>×</button></>}</div></div>)}
+          {results.map((guest, index) => <div className="guest-table-row" key={guest.id ?? guest.email ?? guest.name}><div className="guest-name"><span className={`avatar avatar--guest avatar--guest-${index % 4}`}>{guest.name.split(' ').map((part) => part[0]).slice(0, 2).join('')}</span><strong>{guest.name}</strong></div><span className="table-secondary">{guest.group}</span><span className="table-secondary">{guest.email}</span><StatusPill status={guest.status} /><div className="guest-row-actions">{guest.id && <><button className="plain-icon" aria-label={`Edit ${guest.name}`} onClick={() => { setEditingGuest(guest); setGuestModalOpen(true); }}>Edit</button>{eventFunctions.length > 0 && <button className="plain-icon" aria-label={`Assign event functions to ${guest.name}`} onClick={() => openFunctionAssignment(guest)}>Functions</button>}<button className="plain-icon" aria-label={`Copy invitation link for ${guest.name}`} onClick={() => void shareGuestInvitation(guest)}>Link</button><button className="plain-icon" aria-label={`Renew invitation link for ${guest.name}`} onClick={() => void shareGuestInvitation(guest, true)}>Renew</button><button className="plain-icon" aria-label={`Remove ${guest.name}`} onClick={() => void removeGuest(guest)}>×</button></>}</div></div>)}
           {!results.length && <div className="empty-state"><strong>No guests found</strong><p>Try a different name or RSVP filter.</p></div>}
         </div>
         <div className="table-footer"><span>Showing {results.length} {results.length === 1 ? 'guest' : 'guests'}</span><span>RSVP details update as your loved ones reply.</span></div>
       </section>
       {guestModalOpen && <AddGuestModal initial={editingGuest ?? undefined} onClose={() => { setGuestModalOpen(false); setEditingGuest(null); }} onAdd={editingGuest ? updateGuest : addGuest} />}
+      {assigningGuest && <AssignFunctionsModal
+        open
+        guestName={assigningGuest.name}
+        functions={eventFunctions}
+        selectedIds={selectedFunctionIds}
+        saving={savingFunctionAssignment}
+        error={functionAssignmentError}
+        onChange={setSelectedFunctionIds}
+        onClose={() => setAssigningGuest(null)}
+        onSave={() => void saveFunctionAssignment()}
+      />}
     </div>
   );
 }
@@ -720,6 +796,7 @@ function toGuestRecord(guest: Guest): GuestRecord {
   return {
     id: guest.id,
     invitationToken: guest.invitationToken,
+    invitedFunctionIds: guest.invitedFunctionIds,
     name: guest.name,
     group: guest.group ?? '',
     email: guest.email ?? '',
@@ -1999,6 +2076,7 @@ export function GuestInvitationPage() {
   const { token } = useParams();
   const [response, setResponse] = useState('');
   const [partySize, setPartySize] = useState('1');
+  const [selectedFunctionIds, setSelectedFunctionIds] = useState<string[]>([]);
   const [submitted, setSubmitted] = useState(false);
   const [invitation, setInvitation] = useState<GuestInvitation | null>(null);
   const [loading, setLoading] = useState(true);
@@ -2015,6 +2093,14 @@ export function GuestInvitationPage() {
       .then((result) => {
         if (active) {
           setInvitation(result);
+          setSelectedFunctionIds(
+            result.functions
+              .filter((item) => item.status !== 'pending')
+              .map((item) => item.id)
+              .concat(result.functions.every((item) => item.status === 'pending')
+                ? result.functions.map((item) => item.id)
+                : []),
+          );
           if (result.status === 'attending' || result.status === 'declined' || result.status === 'maybe') {
             setSubmitted(true);
             setResponse(result.status === 'attending' ? 'joyfully' : result.status === 'maybe' ? 'maybe' : 'regretfully');
@@ -2034,6 +2120,10 @@ export function GuestInvitationPage() {
   const submitRsvp = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!token || !invitation || !response) return;
+    if (invitation.functions.length && !selectedFunctionIds.length) {
+      setError('Select at least one function to RSVP to.');
+      return;
+    }
     setSubmitting(true);
     setError('');
     try {
@@ -2042,7 +2132,7 @@ export function GuestInvitationPage() {
         invitationToken: token,
         status: response === 'joyfully' ? 'attending' : response === 'maybe' ? 'maybe' : 'declined',
         plusOnes: response === 'joyfully' ? Math.max(Number(partySize) - 1, 0) : 0,
-        functionIds: [],
+        functionIds: selectedFunctionIds,
       });
       setSubmitted(true);
     } catch (cause) {
@@ -2056,7 +2146,38 @@ export function GuestInvitationPage() {
       <div className="guest-portal-brand"><span className="brand-mark">u</span><span className="brand-word">utsav<span>.</span></span></div>
       {loading && <section className="guest-thank-you"><p role="status">Loading your invitation…</p></section>}
       {!loading && error && !invitation && <section className="guest-thank-you"><p className="form-error" role="alert">{error}</p></section>}
-      {!loading && invitation && (!submitted ? <section className="guest-invitation-card"><div className="guest-invitation-art"><span>TOGETHER WITH THEIR FAMILIES</span><i>✿</i><h1>{invitation.event.name}</h1><b>INVITE YOU TO CELEBRATE</b><strong>{invitation.event.name}</strong><small>{formatDate(invitation.event.date)} · {invitation.event.location || 'Details to follow'}</small></div><div className="guest-invitation-content"><span className="eyebrow">A LITTLE NOTE, JUST FOR YOU</span><h2>It wouldn’t be the same without you, {invitation.guestName}.</h2><p>We’d love for you to join us as we celebrate a day full of love, laughter, and all our favourite people.</p><div className="guest-event-details"><span><small>THE DAY</small><strong>{formatDate(invitation.event.date)}</strong></span><span><small>THE PLACE</small><strong>{invitation.event.location || 'Details to follow'}</strong></span></div><form className="guest-rsvp-form" onSubmit={submitRsvp}><span className="rsvp-question">Will you be joining us?</span><div className="rsvp-options"><button type="button" className={response === 'joyfully' ? 'rsvp-option rsvp-option--selected' : 'rsvp-option'} onClick={() => setResponse('joyfully')}><span>☺</span><strong>Joyfully accepts</strong><small>Save a dance for us</small></button><button type="button" className={response === 'regretfully' ? 'rsvp-option rsvp-option--selected' : 'rsvp-option'} onClick={() => setResponse('regretfully')}><span>♡</span><strong>Regretfully declines</strong><small>We’ll be there in spirit</small></button><button type="button" className={response === 'maybe' ? 'rsvp-option rsvp-option--selected' : 'rsvp-option'} onClick={() => setResponse('maybe')}><span>◷</span><strong>Maybe</strong><small>I’ll let you know soon</small></button></div>{response === 'joyfully' && <label>How many will be joining you?<select value={partySize} onChange={(event) => setPartySize(event.target.value)}><option value="1">Just me</option><option value="2">Two of us</option><option value="3">Three of us</option><option value="4">Four of us</option></select></label>}{error && <p className="form-error" role="alert">{error}</p>}<button type="submit" className="button button--primary guest-rsvp-submit" disabled={!response || submitting}>{submitting ? 'Sending…' : 'Send your RSVP with love →'}</button><small className="guest-token-note">Invitation {token ? `#${token.slice(0, 8)}` : ''}</small></form></div></section> : <section className="guest-thank-you"><span>✿</span><p className="eyebrow">YOUR REPLY IS SAFELY WITH US</p><h1>{response === 'joyfully' ? 'We can’t wait to see you.' : response === 'maybe' ? 'Thank you for letting us know.' : 'You’ll be there in spirit.'}</h1><p>Thank you, {invitation.guestName}. We’re so glad you could reply.</p>{response === 'joyfully' && <small>{partySize === '1' ? 'Just you' : `${partySize} guests`} joining the celebration</small>}<div className="guest-thank-you-signature">With love,<br /><strong>{invitation.event.name}</strong></div></section>)}
+      {!loading && invitation && (!submitted ? <section className="guest-invitation-card">
+        <div className="guest-invitation-art"><span>TOGETHER WITH THEIR FAMILIES</span><i>✿</i><h1>{invitation.event.name}</h1><b>INVITE YOU TO CELEBRATE</b><strong>{invitation.event.name}</strong><small>{formatDate(invitation.event.date)} · {invitation.event.location || 'Details to follow'}</small></div>
+        <div className="guest-invitation-content">
+          <span className="eyebrow">A LITTLE NOTE, JUST FOR YOU</span><h2>It wouldn’t be the same without you, {invitation.guestName}.</h2><p>We’d love for you to join us as we celebrate a day full of love, laughter, and all our favourite people.</p>
+          <div className="guest-event-details"><span><small>THE DAY</small><strong>{formatDate(invitation.event.date)}</strong></span><span><small>THE PLACE</small><strong>{invitation.event.location || 'Details to follow'}</strong></span></div>
+          <form className="guest-rsvp-form" onSubmit={submitRsvp}>
+            <span className="rsvp-question">Will you be joining us?</span>
+            <div className="rsvp-options">
+              <button type="button" className={response === 'joyfully' ? 'rsvp-option rsvp-option--selected' : 'rsvp-option'} onClick={() => setResponse('joyfully')}><span>☺</span><strong>Joyfully accepts</strong><small>Save a dance for us</small></button>
+              <button type="button" className={response === 'regretfully' ? 'rsvp-option rsvp-option--selected' : 'rsvp-option'} onClick={() => setResponse('regretfully')}><span>♡</span><strong>Regretfully declines</strong><small>We’ll be there in spirit</small></button>
+              <button type="button" className={response === 'maybe' ? 'rsvp-option rsvp-option--selected' : 'rsvp-option'} onClick={() => setResponse('maybe')}><span>◷</span><strong>Maybe</strong><small>I’ll let you know soon</small></button>
+            </div>
+            {invitation.functions.length > 0 && <fieldset className="guest-function-options">
+              <legend>Which parts of the celebration are you responding to?</legend>
+              {invitation.functions.map((item) => <label key={item.id}>
+                <input
+                  type="checkbox"
+                  checked={selectedFunctionIds.includes(item.id)}
+                  onChange={() => setSelectedFunctionIds((current) => current.includes(item.id)
+                    ? current.filter((id) => id !== item.id)
+                    : [...current, item.id])}
+                />
+                <span><strong>{item.name}</strong><small>{formatDate(item.date)}{item.venue ? ` · ${item.venue}` : ''}</small></span>
+              </label>)}
+            </fieldset>}
+            {response === 'joyfully' && <label>How many will be joining you?<select value={partySize} onChange={(event) => setPartySize(event.target.value)}><option value="1">Just me</option><option value="2">Two of us</option><option value="3">Three of us</option><option value="4">Four of us</option></select></label>}
+            {error && <p className="form-error" role="alert">{error}</p>}
+            <button type="submit" className="button button--primary guest-rsvp-submit" disabled={!response || submitting}>{submitting ? 'Sending…' : 'Send your RSVP with love →'}</button>
+            <small className="guest-token-note">Invitation {token ? `#${token.slice(0, 8)}` : ''}</small>
+          </form>
+        </div>
+      </section> : <section className="guest-thank-you"><span>✿</span><p className="eyebrow">YOUR REPLY IS SAFELY WITH US</p><h1>{response === 'joyfully' ? 'We can’t wait to see you.' : response === 'maybe' ? 'Thank you for letting us know.' : 'You’ll be there in spirit.'}</h1><p>Thank you, {invitation.guestName}. We’re so glad you could reply.</p>{response === 'joyfully' && <small>{partySize === '1' ? 'Just you' : `${partySize} guests`} joining the celebration</small>}<div className="guest-thank-you-signature">With love,<br /><strong>{invitation.event.name}</strong></div></section>)}
       <footer className="guest-portal-footer">MADE WITH LOVE, SHARED WITH UTSAV <span>✦</span></footer>
     </main>
   );

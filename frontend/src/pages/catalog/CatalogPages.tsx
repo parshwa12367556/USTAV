@@ -106,25 +106,6 @@ const specs: PageSpec[] = [
   { path: '/not-found', title: 'This page wandered off for a moment.', eyebrow: 'NOTHING TO WORRY ABOUT', description: 'The link may have changed, but your celebration plans are safe.', section: 'public', action: 'Back to your workspace', mode: 'confirmation' },
 ];
 
-const itemSeeds: Record<string, CatalogItem[]> = {
-  '/rsvp': guests.map((guest) => ({ name: guest.name, detail: `${guest.group} · ${guest.email}`, date: '18 Dec 2026', status: guest.status })),
-  '/payments': [
-    { name: 'The Marigold House', detail: 'Venue booking · Deposit', date: '4 Nov 2026', status: 'Paid' },
-    { name: 'House of Petals', detail: 'Mehendi decor · First instalment', date: '2 Nov 2026', status: 'Paid' },
-    { name: 'Golden Hour Studio', detail: 'Photography · Booking deposit', date: 'Due 15 Nov', status: 'Due soon' },
-  ],
-  '/vendor/quotation-requests': [
-    { name: 'Meera Sharma', detail: 'Wedding venue · 250 guests', date: '18 Dec 2026', status: 'New request' },
-    { name: 'Ritika Jain', detail: 'Venue & catering · 120 guests', date: '22 Dec 2026', status: 'New request' },
-    { name: 'Kabir Mehta', detail: 'Sangeet · 180 guests', date: '3 Jan 2027', status: 'Replied' },
-  ],
-  '/vendor/reviews': [
-    { name: 'Ananya & Karan', detail: '“The team made the whole evening feel effortless.”', date: '2 Nov 2026', status: '5.0 ★' },
-    { name: 'Neha Sharma', detail: '“Beautiful details and such thoughtful service.”', date: '28 Oct 2026', status: '5.0 ★' },
-    { name: 'Rohan & Diya', detail: '“We felt looked after from the very first call.”', date: '21 Oct 2026', status: '4.9 ★' },
-  ],
-};
-
 const titlesByPath = new Map(specs.map((spec) => [spec.path, spec]));
 
 function findSpec(pathname: string): PageSpec {
@@ -140,11 +121,183 @@ function findSpec(pathname: string): PageSpec {
   };
 }
 
-const fallbackRows: CatalogItem[] = [
-  { name: 'Aarav & Meera’s Wedding', detail: 'Jaipur, Rajasthan · 250 guests', date: '18 Dec 2026', status: 'Planning' },
-  { name: 'Diya’s Mehendi', detail: 'Jaipur, Rajasthan · 120 guests', date: '16 Dec 2026', status: 'Confirmed' },
-  { name: 'Family Engagement', detail: 'Udaipur, Rajasthan · 80 guests', date: '8 Feb 2027', status: 'Planning' },
-];
+const itemSeeds: Record<string, CatalogItem[]> = {
+  '/events/create': [
+    { name: 'Aarav & Meera’s Wedding', detail: 'Wedding celebration · Jaipur', date: '18 Dec 2026', status: 'Planning' },
+    { name: 'Diya’s Mehendi', detail: 'Mehendi · Jaipur', date: '16 Dec 2026', status: 'Confirmed' },
+  ],
+  '/events/:eventId': [
+    { name: 'Aarav & Meera’s Wedding', detail: 'Jaipur, Rajasthan · 250 guests · ₹18,50,000 budget', date: '18 Dec 2026', status: 'Planning' },
+    { name: 'Diya’s Mehendi', detail: 'Jaipur, Rajasthan · 120 guests · ₹4,25,000 budget', date: '16 Dec 2026', status: 'Confirmed' },
+  ],
+  '/functions/:functionId': [
+    { name: 'Welcome dinner', detail: 'The Marigold House · 180 guests', date: '17 Dec 2026 · 7:00 pm', status: 'Confirmed' },
+    { name: 'Wedding ceremony', detail: 'Courtyard lawn · 250 guests', date: '18 Dec 2026 · 10:30 am', status: 'Planning' },
+  ],
+  '/guest-groups': [
+    { name: 'Bride’s family', detail: 'Family group · 42 guests', date: '18 Dec 2026', status: 'Confirmed' },
+    { name: 'College friends', detail: 'Friends group · 18 guests', date: '18 Dec 2026', status: 'Planning' },
+  ],
+  '/invitation-editor': [
+    { name: 'Aarav & Meera — Wedding', detail: 'Floral • English • Digital invitation', date: '18 Dec 2026', status: 'Draft' },
+    { name: 'Diya — Mehendi', detail: 'Festive • Hindi • Digital invitation', date: '16 Dec 2026', status: 'Published' },
+  ],
+  '/rsvp': [
+    { name: 'Ananya Sharma', detail: 'Bride’s family · ananya.s@email.com', date: '18 Dec 2026', status: 'Confirmed' },
+    { name: 'Kavya Iyer', detail: 'Friends · kavya.iyer@email.com', date: '18 Dec 2026', status: 'Pending' },
+    { name: 'Ishaan Verma', detail: 'Colleagues · ishaan.v@email.com', date: '18 Dec 2026', status: 'Declined' },
+  ],
+  '/catering': [
+    { name: 'Royal vegetarian feast', detail: 'Saffron & Sage Catering · ₹1,200 per plate', date: 'Jaipur', status: 'Menu available' },
+    { name: 'Rajasthani celebration menu', detail: 'Pink City Kitchens · ₹1,450 per plate', date: 'Jaipur', status: 'Menu available' },
+  ],
+  '/decoration': [
+    { name: 'Marigold garden mandap', detail: 'Floral · Marigold, jasmine, fresh foliage', date: 'Ceremony', status: 'Available' },
+    { name: 'Candlelit courtyard', detail: 'Minimal · Warm lights and brass accents', date: 'Reception', status: 'Available' },
+  ],
+  '/event-management': [
+    { name: 'Aditi Mehra Events', detail: 'Full planning · Weddings and family celebrations', date: 'Jaipur', status: 'Available' },
+    { name: 'The Celebration Edit', detail: 'Day-of coordination · On-site team of 5', date: 'Udaipur', status: 'Available' },
+  ],
+  '/other-services': [
+    { name: 'Sur Sangeet Collective', detail: 'Music & entertainment · Live folk and DJ', date: 'Jaipur', status: 'Available' },
+    { name: 'Rang by Rhea', detail: 'Makeup & styling · Bridal and family packages', date: 'Jaipur', status: 'Available' },
+    { name: 'Royal Route Coaches', detail: 'Guest transport · 25- and 40-seat vehicles', date: 'Rajasthan', status: 'Available' },
+  ],
+  '/quotations': [
+    { name: 'The Marigold House', detail: 'Venue package · ₹3,20,000', date: 'Valid until 20 Nov 2026', status: 'sent' },
+    { name: 'House of Petals', detail: 'Mehendi decor · ₹92,000', date: 'Valid until 25 Nov 2026', status: 'draft' },
+  ],
+  '/quotations/:quoteId': [
+    { name: 'The Marigold House', detail: 'Venue hire, furniture, and event-day staffing · ₹3,20,000', date: 'Valid until 20 Nov 2026', status: 'sent' },
+  ],
+  '/bookings/:bookingId': [
+    { name: 'The Marigold House', detail: 'Wedding venue · Deposit paid ₹80,000 of ₹3,20,000', date: '18 Dec 2026', status: 'Confirmed' },
+  ],
+  '/payments': [
+    { name: 'The Marigold House', detail: 'Venue booking · Deposit · ₹80,000', date: '4 Nov 2026', status: 'Paid' },
+    { name: 'House of Petals', detail: 'Mehendi decor · First instalment · ₹30,000', date: '2 Nov 2026', status: 'Paid' },
+    { name: 'Golden Hour Studio', detail: 'Photography · Booking deposit · ₹20,000', date: 'Due 15 Nov', status: 'Due soon' },
+  ],
+  '/payments/:paymentId': [
+    { name: 'INV-2026-0418', detail: 'The Marigold House · Venue deposit · ₹80,000', date: '4 Nov 2026', status: 'Paid' },
+  ],
+  '/members': [
+    { name: 'Meera Sharma', detail: 'Workspace owner · meera@email.com', date: 'Joined 2 Nov 2026', status: 'Active' },
+    { name: 'Aarav Sharma', detail: 'Co-planner · aarav@email.com', date: 'Joined 3 Nov 2026', status: 'Active' },
+  ],
+  '/notifications': [
+    { name: 'Kavya Iyer replied to your invitation', detail: 'RSVP · Aarav & Meera’s Wedding', date: 'Today, 9:42 am', status: 'New' },
+    { name: 'The Marigold House sent a quotation', detail: 'Vendor update · Venue booking', date: 'Yesterday', status: 'New' },
+  ],
+  '/family-settings': [
+    { name: 'Sharma family workspace', detail: 'Primary contact · Meera Sharma', date: 'Jaipur, Rajasthan', status: 'Saved' },
+  ],
+  '/vendor/profile': [
+    { name: 'The Marigold House', detail: 'Wedding venue · Jaipur, Rajasthan', date: 'Updated 5 Nov 2026', status: 'Published' },
+  ],
+  '/vendor/services': [
+    { name: 'Wedding venue rental', detail: 'Indoor and garden spaces · Up to 300 guests', date: 'From ₹2,40,000', status: 'Active' },
+    { name: 'Event-day coordination', detail: 'Dedicated venue coordinator · 10 hours', date: 'From ₹18,000', status: 'Active' },
+  ],
+  '/vendor/packages': [
+    { name: 'Garden wedding package', detail: 'Venue, seating, and event-day coordinator', date: 'From ₹2,40,000', status: 'Published' },
+    { name: 'Intimate celebration', detail: 'Courtyard venue and dining for up to 100 guests', date: 'From ₹1,10,000', status: 'Draft' },
+  ],
+  '/vendor/portfolio': [
+    { name: 'A winter wedding in Jaipur', detail: 'Garden ceremony · 240 guests · 18 photos', date: 'Added 5 Nov 2026', status: 'Published' },
+    { name: 'An intimate courtyard mehendi', detail: 'Floral installation · 90 guests · 12 photos', date: 'Added 29 Oct 2026', status: 'Published' },
+  ],
+  '/vendor/availability': [
+    { name: '18 December 2026', detail: 'Wedding celebration · Jaipur', date: 'Full day', status: 'Available' },
+    { name: '20 December 2026', detail: 'Private event hold', date: 'Until 12 Nov', status: 'On hold' },
+  ],
+  '/vendor/quotation-requests': [
+    { name: 'Meera Sharma', detail: 'Wedding venue · Jaipur · 250 guests', date: '18 Dec 2026', status: 'New request' },
+    { name: 'Ritika Jain', detail: 'Venue & catering · Udaipur · 120 guests', date: '22 Dec 2026', status: 'New request' },
+  ],
+  '/vendor/quotations': [
+    { name: 'Aarav & Meera — Wedding venue', detail: 'Venue hire and event-day staffing · ₹3,20,000', date: 'Valid until 20 Nov 2026', status: 'sent' },
+    { name: 'Ritika Jain — Engagement', detail: 'Courtyard venue package · ₹1,45,000', date: 'Valid until 22 Nov 2026', status: 'draft' },
+  ],
+  '/vendor/bookings': [
+    { name: 'Aarav & Meera’s Wedding', detail: 'Venue booking · Jaipur · 250 guests', date: '18 Dec 2026', status: 'Confirmed' },
+    { name: 'Diya’s Mehendi', detail: 'Courtyard booking · Jaipur · 120 guests', date: '16 Dec 2026', status: 'Confirmed' },
+  ],
+  '/vendor/payments': [
+    { name: 'Aarav & Meera — Deposit', detail: 'Venue booking · ₹80,000 received', date: '4 Nov 2026', status: 'Paid' },
+    { name: 'Diya — Final balance', detail: 'Courtyard booking · ₹45,000 outstanding', date: 'Due 10 Dec 2026', status: 'Due soon' },
+  ],
+  '/vendor/reviews': [
+    { name: 'Ananya & Karan', detail: '“The team made the whole evening feel effortless.”', date: '2 Nov 2026', status: '5.0 ★' },
+    { name: 'Neha Sharma', detail: '“Beautiful details and such thoughtful service.”', date: '28 Oct 2026', status: '5.0 ★' },
+  ],
+  '/vendor/analytics': [
+    { name: 'Profile visits', detail: 'Families who viewed your public profile', date: 'This month', status: '248 visits' },
+    { name: 'New enquiries', detail: 'Families who requested availability or pricing', date: 'This month', status: '18 enquiries' },
+    { name: 'Enquiry conversion', detail: 'Profile views that became enquiries', date: 'This month', status: '7.3%' },
+  ],
+  '/vendor/settings': [
+    { name: 'Business contact', detail: 'hello@marigoldhouse.in · +91 98765 43210', date: 'Jaipur, Rajasthan', status: 'Verified' },
+    { name: 'Payout preference', detail: 'Monthly bank transfer · Account ending 4821', date: 'Updated 1 Nov 2026', status: 'Active' },
+  ],
+  '/admin/users': [
+    { name: 'Meera Sharma', detail: 'Family · meera@email.com', date: 'Joined 2 Nov 2026', status: 'Active' },
+    { name: 'The Marigold House', detail: 'Vendor · hello@marigoldhouse.in', date: 'Joined 1 Nov 2026', status: 'Active' },
+  ],
+  '/admin/families': [
+    { name: 'Sharma family workspace', detail: 'Jaipur · 3 members · 2 celebrations', date: 'Created 2 Nov 2026', status: 'Active' },
+    { name: 'Jain family workspace', detail: 'Udaipur · 4 members · 1 celebration', date: 'Created 30 Oct 2026', status: 'Active' },
+  ],
+  '/admin/vendors': [
+    { name: 'The Marigold House', detail: 'Wedding venue · Jaipur', date: 'Applied 1 Nov 2026', status: 'Verified' },
+    { name: 'Saffron & Sage Catering', detail: 'Catering · Jaipur', date: 'Applied 5 Nov 2026', status: 'Needs review' },
+  ],
+  '/admin/vendor-verification': [
+    { name: 'Saffron & Sage Catering', detail: 'Catering · Jaipur · Documents submitted', date: 'Submitted 5 Nov 2026', status: 'Needs review' },
+    { name: 'Golden Hour Studio', detail: 'Photography · Jaipur · Portfolio review', date: 'Submitted 3 Nov 2026', status: 'Needs review' },
+  ],
+  '/admin/categories': [
+    { name: 'Venues', detail: 'Marketplace category · 42 active vendors', date: 'Updated 4 Nov 2026', status: 'Active' },
+    { name: 'Catering', detail: 'Marketplace category · 28 active vendors', date: 'Updated 2 Nov 2026', status: 'Active' },
+  ],
+  '/admin/venues': [
+    { name: 'The Marigold House', detail: 'Jaipur · capacity 300 guests', date: '₹2,40,000 / day', status: 'Active' },
+    { name: 'The Courtyard Palace', detail: 'Udaipur · capacity 220 guests', date: '₹3,10,000 / day', status: 'Active' },
+  ],
+  '/admin/templates': [
+    { name: 'Marigold Garden', detail: 'Floral · Digital invitation', date: 'Free', status: 'Published' },
+    { name: 'Jaipur Evening', detail: 'Traditional · Digital invitation', date: '₹499', status: 'Published' },
+  ],
+  '/admin/bookings': [
+    { name: 'Aarav & Meera — The Marigold House', detail: 'Venue booking · Jaipur · 250 guests', date: '18 Dec 2026', status: 'Confirmed' },
+    { name: 'Diya — Saffron & Sage Catering', detail: 'Catering · Jaipur · 120 guests', date: '16 Dec 2026', status: 'Confirmed' },
+  ],
+  '/admin/payments': [
+    { name: 'TXN-2026-0418', detail: 'Venue deposit · ₹80,000 · The Marigold House', date: '4 Nov 2026', status: 'Paid' },
+    { name: 'TXN-2026-0417', detail: 'Catering deposit · ₹42,000 · Saffron & Sage', date: '3 Nov 2026', status: 'Paid' },
+  ],
+  '/admin/commissions': [
+    { name: 'Wedding venues', detail: 'Commission rate · 8%', date: 'Effective 1 Nov 2026', status: 'Active' },
+    { name: 'Catering', detail: 'Commission rate · 6%', date: 'Effective 1 Nov 2026', status: 'Active' },
+  ],
+  '/admin/reviews': [
+    { name: 'Review flagged for moderation', detail: 'The Marigold House · Reported as irrelevant', date: '5 Nov 2026', status: 'Needs review' },
+    { name: 'New vendor feedback', detail: 'Saffron & Sage Catering · 4.8 stars', date: '3 Nov 2026', status: 'Published' },
+  ],
+  '/admin/reports': [
+    { name: 'Celebration activity', detail: 'New workspaces, events, and guest responses', date: 'November 2026', status: 'Ready' },
+    { name: 'Marketplace performance', detail: 'Vendor enquiries, bookings, and conversion', date: 'November 2026', status: 'Ready' },
+  ],
+  '/admin/audit-logs': [
+    { name: 'Vendor verification updated', detail: 'Admin account · The Marigold House marked verified', date: 'Today, 9:42 am', status: 'Recorded' },
+    { name: 'Invitation template published', detail: 'Admin account · Marigold Garden', date: 'Yesterday', status: 'Recorded' },
+  ],
+  '/admin/settings': [
+    { name: 'Platform identity', detail: 'Utsav · support@utsav.example', date: 'Updated 1 Nov 2026', status: 'Active' },
+    { name: 'Default commission', detail: '8% for venue bookings', date: 'Effective 1 Nov 2026', status: 'Active' },
+  ],
+};
 
 function defaultItems(spec: PageSpec): CatalogItem[] {
   if (itemSeeds[spec.path]) return itemSeeds[spec.path];
@@ -156,14 +309,7 @@ function defaultItems(spec: PageSpec): CatalogItem[] {
       status: index === 0 ? 'Confirmed' : 'Needs attention',
     }));
   }
-  if (spec.section === 'admin') {
-    return [
-      { name: 'The Marigold House', detail: 'Wedding venue · Jaipur', date: 'Today, 9:42 am', status: 'Verified' },
-      { name: 'Saffron & Sage Catering', detail: 'Catering · Jaipur', date: 'Yesterday', status: 'Needs review' },
-      { name: 'House of Petals', detail: 'Decor & flowers · Jaipur', date: '5 Nov 2026', status: 'Active' },
-    ];
-  }
-  return fallbackRows;
+  return [];
 }
 
 function actionStatus(status: string) {
@@ -184,13 +330,74 @@ function isCatalogItems(value: unknown): value is CatalogItem[] {
   );
 }
 
+const previousFallbackItems: CatalogItem[] = [
+  { name: 'Aarav & Meera’s Wedding', detail: 'Jaipur, Rajasthan · 250 guests', date: '18 Dec 2026', status: 'Planning' },
+  { name: 'Diya’s Mehendi', detail: 'Jaipur, Rajasthan · 120 guests', date: '16 Dec 2026', status: 'Confirmed' },
+  { name: 'Family Engagement', detail: 'Udaipur, Rajasthan · 80 guests', date: '8 Feb 2027', status: 'Planning' },
+];
+
+function isPreviousDemoData(pathname: string, items: CatalogItem[]): boolean {
+  let previousItems: CatalogItem[] | undefined;
+  if (pathname === '/rsvp') {
+    previousItems = guests.map((guest) => ({ name: guest.name, detail: `${guest.group} · ${guest.email}`, date: '18 Dec 2026', status: guest.status }));
+  } else if (pathname === '/payments') {
+    previousItems = [
+      { name: 'The Marigold House', detail: 'Venue booking · Deposit', date: '4 Nov 2026', status: 'Paid' },
+      { name: 'House of Petals', detail: 'Mehendi decor · First instalment', date: '2 Nov 2026', status: 'Paid' },
+      { name: 'Golden Hour Studio', detail: 'Photography · Booking deposit', date: 'Due 15 Nov', status: 'Due soon' },
+    ];
+  } else if (pathname === '/vendor/quotation-requests') {
+    previousItems = [
+      { name: 'Meera Sharma', detail: 'Wedding venue · 250 guests', date: '18 Dec 2026', status: 'New request' },
+      { name: 'Ritika Jain', detail: 'Venue & catering · 120 guests', date: '22 Dec 2026', status: 'New request' },
+      { name: 'Kabir Mehta', detail: 'Sangeet · 180 guests', date: '3 Jan 2027', status: 'Replied' },
+    ];
+  } else if (pathname === '/vendor/reviews') {
+    previousItems = [
+      { name: 'Ananya & Karan', detail: '“The team made the whole evening feel effortless.”', date: '2 Nov 2026', status: '5.0 ★' },
+      { name: 'Neha Sharma', detail: '“Beautiful details and such thoughtful service.”', date: '28 Oct 2026', status: '5.0 ★' },
+      { name: 'Rohan & Diya', detail: '“We felt looked after from the very first call.”', date: '21 Oct 2026', status: '4.9 ★' },
+    ];
+  } else if (pathname.startsWith('/vendor/')) {
+    previousItems = vendors.slice(0, 4).map((vendor, index) => ({
+      name: vendor.name,
+      detail: `${vendor.category} · ${vendor.price}`,
+      date: `${index + 2} Nov 2026`,
+      status: index === 0 ? 'Confirmed' : 'Needs attention',
+    }));
+  } else if (pathname.startsWith('/admin/')) {
+    previousItems = [
+      { name: 'The Marigold House', detail: 'Wedding venue · Jaipur', date: 'Today, 9:42 am', status: 'Verified' },
+      { name: 'Saffron & Sage Catering', detail: 'Catering · Jaipur', date: 'Yesterday', status: 'Needs review' },
+      { name: 'House of Petals', detail: 'Decor & flowers · Jaipur', date: '5 Nov 2026', status: 'Active' },
+    ];
+  } else {
+    previousItems = previousFallbackItems;
+  }
+  return JSON.stringify(items) === JSON.stringify(previousItems);
+}
+
+function getCatalogInitialItems(pathname: string, defaults: CatalogItem[]): CatalogItem[] {
+  if (typeof window === 'undefined') return defaults;
+  try {
+    const saved = window.localStorage.getItem(`utsav-catalog:${pathname}`);
+    if (!saved) return defaults;
+    const parsed: unknown = JSON.parse(saved);
+    if (!isCatalogItems(parsed)) return defaults;
+    return isPreviousDemoData(pathname, parsed) ? defaults : parsed;
+  } catch (cause) {
+    console.error(`Unable to migrate catalog data for "${pathname}".`, cause);
+    return defaults;
+  }
+}
+
 export function CatalogWorkspacePage() {
   const { pathname } = useLocation();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const { isAuthenticated } = useAuth();
   const spec = findSpec(pathname);
-  const initialItems = useMemo(() => defaultItems(spec), [pathname]);
+  const initialItems = useMemo(() => getCatalogInitialItems(pathname, defaultItems(spec)), [pathname]);
   const liveDataPaths = [
     '/catering',
     '/quotations',
@@ -209,7 +416,7 @@ export function CatalogWorkspacePage() {
     spec.section !== 'public' && spec.section !== 'auth' && spec.section !== 'guest' &&
     !liveDataPaths.includes(pathname);
   const [savedItems, setSavedItems, storageError] = usePersistentState(
-    `utsav-catalog:${pathname}`,
+    `utsav-catalog:v2:${pathname}`,
     initialItems,
     isCatalogItems,
   );
@@ -542,9 +749,17 @@ export function CatalogWorkspacePage() {
   if (spec.section === 'guest') return <ConfirmationPage spec={spec} />;
 
   const stats = spec.stats ?? [
-    { label: spec.section === 'admin' ? 'IN THIS VIEW' : 'ON YOUR LIST', value: String(items.length).padStart(2, '0'), foot: 'Everything, in one place' },
-    { label: 'NEEDS A LITTLE ATTENTION', value: String(items.filter((item) => item.status !== 'Completed' && item.status !== 'Paid').length).padStart(2, '0'), foot: 'A good next step' },
-    { label: 'THIS MONTH', value: spec.section === 'vendor' ? '12' : '06', foot: 'Lovely things are happening' },
+    { label: spec.eyebrow, value: String(items.length).padStart(2, '0'), foot: 'Records in this section' },
+    {
+      label: 'NEEDS FOLLOW-UP',
+      value: String(items.filter((item) => ['Pending', 'Needs review', 'New request', 'Due soon', 'Draft'].includes(item.status)).length).padStart(2, '0'),
+      foot: spec.action,
+    },
+    {
+      label: 'ACTIVE OR CONFIRMED',
+      value: String(items.filter((item) => ['Active', 'Confirmed', 'Published', 'Verified', 'Paid'].includes(item.status)).length).padStart(2, '0'),
+      foot: 'Ready or completed items',
+    },
   ];
 
   return (
@@ -565,7 +780,7 @@ export function CatalogWorkspacePage() {
         {hasUnsupportedAuthenticatedWorkflow && <p className="form-error" role="alert">This section does not have a connected backend workflow yet. Demo data is hidden while you are signed in.</p>}
         {remoteError && <p className="form-error" role="alert">{remoteError}</p>}
         {remoteLoading && <p role="status">Loading live data…</p>}
-        <div className="list-toolbar"><div><h2>{spec.section === 'admin' ? 'The latest activity' : spec.section === 'vendor' ? 'Your studio at a glance' : spec.path === '/rsvp' ? 'The people who’ve replied' : 'Your details, all together'}</h2><p className="section-description">{spec.section === 'admin' ? 'A careful overview of what’s happening across Utsav.' : 'Search, review, and take the next thoughtful step.'}</p></div>{(spec.mode === 'form' || spec.mode === 'editor') && <button className="button button--outline" onClick={() => setModalOpen(true)}><Icon name="plus" size={15} />{spec.action}</button>}</div>
+        <div className="list-toolbar"><div><h2>{spec.title.replace(/[.!?]+$/, '')}</h2><p className="section-description">{spec.description}</p></div>{(spec.mode === 'form' || spec.mode === 'editor') && <button className="button button--outline" onClick={() => setModalOpen(true)}><Icon name="plus" size={15} />{spec.action}</button>}</div>
         <div className="catalog-tools"><div className="inline-search"><Icon name="search" size={16} /><input placeholder={`Search ${spec.title.toLowerCase()}...`} value={query} onChange={(event) => setQuery(event.target.value)} /></div>{spec.categories && <div className="filter-tabs">{spec.categories.map((category) => <button className={activeCategory === category ? 'filter-tab filter-tab--active' : 'filter-tab'} key={category} onClick={() => setActiveCategory(category)}>{category}</button>)}</div>}</div>
         <div className="catalog-table-wrap"><div className="catalog-row catalog-row--header"><span>NAME</span><span>DETAILS</span><span>DATE</span><span>STATUS</span><span /></div>
           {visibleItems.map((item, index) => <article className="catalog-row" key={`${item.name}-${index}`}><div className="catalog-name"><span className={`catalog-avatar catalog-avatar--${index % 4}`}>{item.name.split(/\s+/).slice(0, 2).map((word) => word[0]).join('').toUpperCase()}</span><strong>{item.name}</strong></div><span className="catalog-detail">{item.detail}</span><span className="catalog-date">{item.date}</span><span className={`catalog-status catalog-status--${item.status.toLowerCase().replaceAll(' ', '-')}`}>{item.status}</span><button className="button button--outline catalog-row-action" onClick={() => saveAction(item)}>{item.status === 'New request' ? 'Reply' : item.status === 'Needs review' ? 'Review' : item.status === 'Pending' ? 'Follow up' : 'View'} <span>↗</span></button></article>)}
@@ -574,7 +789,7 @@ export function CatalogWorkspacePage() {
         <div className="catalog-footer"><span>Showing {visibleItems.length} of {items.length} items</span><span>Good things are coming together.</span></div>
       </section>
 
-      <div className="tip-banner"><span>✦</span><p><strong>A thoughtful next step</strong> Keep your details up to date. It makes the whole celebration easier for everyone involved.</p></div>
+      <div className="tip-banner"><span>✦</span><p><strong>{spec.action}</strong> {spec.description}</p></div>
       {notice && <div className="catalog-toast" role="status"><span>✓</span>{notice}<button onClick={() => setNotice('')} aria-label="Dismiss">×</button></div>}
       {modalOpen && <CatalogModal spec={spec} onClose={() => setModalOpen(false)} onSubmit={submitForm} submitting={submitting} />}
       {selectedQuotation && <VendorQuotationReplyModal
@@ -651,11 +866,44 @@ function PublicPage({ spec }: { spec: PageSpec }) {
   const [email, setEmail] = useState('');
   const [contactName, setContactName] = useState('');
   const [contactMessage, setContactMessage] = useState('');
-  const landingCards = [
-    { icon: '✿', title: 'Your people, together', body: 'Keep guests, groups, RSVPs, and family updates in one happy place.' },
-    { icon: '⌂', title: 'Find people you trust', body: 'Meet thoughtful local vendors and keep every conversation close.' },
-    { icon: '✦', title: 'A plan that feels like yours', body: 'Bring your budget, bookings, and little details together at your pace.' },
-  ];
+  const landingCardsByPath: Record<string, { icon: string; title: string; body: string }[]> = {
+    '/home': [
+      { icon: '✿', title: 'Bring your people close', body: 'Keep guest groups, invitations, and replies together as your plans take shape.' },
+      { icon: '⌂', title: 'Find trusted local vendors', body: 'Compare venues and services that suit your celebration and your budget.' },
+      { icon: '✦', title: 'Keep every detail in reach', body: 'Track bookings, payments, and the next step from one shared workspace.' },
+    ],
+    '/about': [
+      { icon: '♡', title: 'Made for family planning', body: 'Give everyone helping with the celebration a place to share ideas and updates.' },
+      { icon: '✿', title: 'Built around meaningful moments', body: 'Plan weddings, milestone gatherings, and all the moments worth bringing people together.' },
+      { icon: '✦', title: 'A community that cares', body: 'Connect families with local professionals who understand the details behind the day.' },
+    ],
+    '/services': [
+      { icon: '⌂', title: 'Venues and vendors', body: 'Explore spaces, catering, decor, and trusted professionals for your occasion.' },
+      { icon: '✉', title: 'Invitations and guests', body: 'Share personal invitations, organise guest groups, and follow every RSVP.' },
+      { icon: '₹', title: 'Budgets and bookings', body: 'Compare quotations and keep payments and vendor commitments organised.' },
+    ],
+    '/how-it-works': [
+      { icon: '01', title: 'Create your celebration', body: 'Add the date, location, guest count, and budget to start your workspace.' },
+      { icon: '02', title: 'Plan together', body: 'Invite family, build your guest list, and collect ideas in one place.' },
+      { icon: '03', title: 'Make it happen', body: 'Choose vendors, confirm bookings, and keep everyone up to date.' },
+    ],
+    '/explore/venues': [
+      { icon: '⌂', title: 'Choose the right setting', body: 'Browse celebration spaces by location, capacity, and atmosphere.' },
+      { icon: '₹', title: 'Compare venue details', body: 'Review pricing, amenities, and practical details before you enquire.' },
+      { icon: '✉', title: 'Ask about your date', body: 'Keep venue conversations close to the event you are planning.' },
+    ],
+    '/explore/invitations': [
+      { icon: '✿', title: 'Find a style you love', body: 'Explore floral, traditional, and contemporary designs for your celebration.' },
+      { icon: '✎', title: 'Make it personal', body: 'Add your names, event details, and a message that sounds like you.' },
+      { icon: '✉', title: 'Share with your guests', body: 'Send your invitation and keep responses connected to your guest list.' },
+    ],
+    '/contact': [
+      { icon: '✉', title: 'Tell us what you need', body: 'Share a question about planning, vendors, or your Utsav account.' },
+      { icon: '♡', title: 'Get help from our team', body: 'We will review your message and follow up with useful next steps.' },
+      { icon: '✦', title: 'Keep planning with confidence', body: 'We are here to make the details feel a little easier to manage.' },
+    ],
+  };
+  const landingCards = landingCardsByPath[spec.path] ?? landingCardsByPath['/home'];
   if (spec.path === '/contact' && sent) return <PublicShell><section className="public-thanks"><span>✿</span><p className="eyebrow">YOUR NOTE IS ON ITS WAY</p><h1>Thank you for saying hello.</h1><p>Our celebration team will be in touch soon. We can’t wait to help.</p><button className="button button--primary" onClick={() => setSent(false)}>Send another note</button></section></PublicShell>;
   return <PublicShell><main className="public-page">
     <section className="public-hero"><div className="public-hero-copy"><span className="eyebrow">{spec.eyebrow}</span><h1>{spec.title}</h1><p>{spec.description}</p>{spec.path === '/contact' ? <form className="public-contact-form" onSubmit={(event) => { event.preventDefault(); setSent(true); }}><input aria-label="Your name" placeholder="Your name" required value={contactName} onChange={(event) => setContactName(event.target.value)} /><input aria-label="Your email address" placeholder="Your email address" type="email" required value={email} onChange={(event) => setEmail(event.target.value)} /><textarea aria-label="What can we help with?" placeholder="What can we help with?" required rows={3} value={contactMessage} onChange={(event) => setContactMessage(event.target.value)} /><button className="button button--primary">{spec.action} →</button></form> : <div className="public-hero-actions"><button className="button button--primary" onClick={() => navigate('/register')}>{spec.action} →</button><button className="button button--quiet" onClick={() => navigate('/how-it-works')}>See how it works</button></div>}<div className="public-social-proof"><span className="mini-avatars"><i>AS</i><i>RM</i><i>AK</i></span><span><strong>Made for moments that matter</strong><small>Thoughtful planning for families, together.</small></span></div></div><div className="public-hero-art"><div className="public-art-sun" /><div className="public-art-arch"><i>✿</i><span>make room<br />for joy</span><b>✦</b></div><span className="public-art-flower public-art-flower--one">✿</span><span className="public-art-flower public-art-flower--two">✳</span><span className="public-art-caption">your day, your way</span></div></section>
@@ -697,7 +945,14 @@ function AuthPage({ spec }: { spec: PageSpec }) {
       if (spec.path === '/login') {
         const session = await authApi.login({ email, password: String(values.get('password') ?? '') });
         setSession(session);
-        navigate('/', { replace: true });
+        const from = location.state && typeof location.state === 'object' && 'from' in location.state
+          ? location.state.from
+          : null;
+        const destination = from && typeof from === 'object' && 'pathname' in from &&
+          typeof from.pathname === 'string' && from.pathname.startsWith('/')
+          ? `${from.pathname}${'search' in from && typeof from.search === 'string' ? from.search : ''}${'hash' in from && typeof from.hash === 'string' ? from.hash : ''}`
+          : '/';
+        navigate(destination, { replace: true });
         return;
       }
       if (spec.path === '/register') {

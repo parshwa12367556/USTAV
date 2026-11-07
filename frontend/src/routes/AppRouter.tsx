@@ -1,6 +1,8 @@
 import { lazy, Suspense } from 'react';
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { WorkspaceLayout } from '../layouts/WorkspaceLayout';
+import { useAuth } from '../hooks/useAuth';
+import { AuthGuard } from './guards/AuthGuard';
 
 const CatalogWorkspacePage = lazy(() =>
   import('../pages/catalog/CatalogPages').then((module) => ({ default: module.CatalogWorkspacePage })),
@@ -38,13 +40,13 @@ export function AppRouter() {
         <Route path="/contact" element={<PublicPageRoute />} />
         <Route path="/explore/venues" element={<PublicPageRoute />} />
         <Route path="/explore/invitations" element={<PublicPageRoute />} />
-        <Route path="/login" element={<PublicPageRoute />} />
+        <Route path="/login" element={<LoginRoute />} />
         <Route path="/register" element={<PublicPageRoute />} />
         <Route path="/verify-otp" element={<PublicPageRoute />} />
         <Route path="/forgot-password" element={<PublicPageRoute />} />
         <Route path="/reset-password" element={<PublicPageRoute />} />
         <Route path="/onboarding" element={<PublicPageRoute />} />
-        <Route element={<WorkspaceLayout />}>
+        <Route element={<AuthGuard><WorkspaceLayout /></AuthGuard>}>
           <Route index element={<DashboardPage />} />
           <Route path="dashboard" element={<DashboardPage />} />
           <Route path="events" element={<EventsPage />} />
@@ -97,4 +99,22 @@ export function AppRouter() {
 
 function PublicPageRoute() {
   return <CatalogWorkspacePage />;
+}
+
+function LoginRoute() {
+  const { isAuthenticated, isLoading, activeRole } = useAuth();
+  if (isLoading) {
+    return <div className="page-loading" role="status">Checking your session…</div>;
+  }
+  if (!isAuthenticated) {
+    return <PublicPageRoute />;
+  }
+
+  if (activeRole === 'admin') {
+    return <Navigate to="/admin" replace />;
+  }
+  if (activeRole === 'vendor') {
+    return <Navigate to="/vendor" replace />;
+  }
+  return <Navigate to="/dashboard" replace />;
 }

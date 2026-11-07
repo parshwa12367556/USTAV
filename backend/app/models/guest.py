@@ -38,8 +38,17 @@ class Guest(BaseModel):
     event = db.relationship("Event", back_populates="guests")
     group = db.relationship("GuestGroup", back_populates="guests")
     rsvps = db.relationship("RSVP", back_populates="guest", cascade="all, delete-orphan")
+    function_mappings = db.relationship(
+        "GuestFunctionMapping",
+        back_populates="guest",
+        cascade="all, delete-orphan",
+        lazy="selectin",
+    )
 
     def to_dict(self) -> dict[str, object]:
+        invited_function_ids = [mapping.function_id for mapping in self.function_mappings]
+        if not invited_function_ids:
+            invited_function_ids = [function.id for function in self.event.functions]
         return {
             "id": self.id,
             "eventId": self.event_id,
@@ -51,6 +60,17 @@ class Guest(BaseModel):
             "plusOnes": self.plus_ones,
             "invitationToken": self.invitation_token,
             "invitationExpiresAt": self.invitation_expires_at.isoformat(),
+            "invitedFunctionIds": invited_function_ids,
+            "functionRsvps": [
+                {
+                    "functionId": response.function_id,
+                    "functionName": response.function.name,
+                    "status": response.status,
+                    "plusOnes": response.plus_ones,
+                }
+                for response in self.rsvps
+                if response.function_id is not None
+            ],
         }
 
 
@@ -62,3 +82,6 @@ class GuestFunctionMapping(BaseModel):
 
     guest_id = db.Column(db.String(36), db.ForeignKey("guests.id", ondelete="CASCADE"), nullable=False)
     function_id = db.Column(db.String(36), db.ForeignKey("event_functions.id", ondelete="CASCADE"), nullable=False)
+
+    guest = db.relationship("Guest", back_populates="function_mappings")
+    function = db.relationship("Function")

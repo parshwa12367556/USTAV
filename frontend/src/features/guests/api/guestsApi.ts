@@ -22,6 +22,13 @@ export const guestsApi = {
     const response = await apiClient.patch<Guest>(`/guests/${encodeURIComponent(id)}`, input);
     return response.data;
   },
+  async assignFunctions(id: string, functionIds: string[]): Promise<string[]> {
+    const response = await apiClient.put<{ functionIds: string[] }>(
+      `/guests/${encodeURIComponent(id)}/functions`,
+      { functionIds },
+    );
+    return response.data.functionIds;
+  },
   async remove(id: string): Promise<void> {
     await apiClient.delete(`/guests/${encodeURIComponent(id)}`);
   },

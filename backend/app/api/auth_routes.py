@@ -1,4 +1,4 @@
-from flask import Blueprint, current_app, request
+from flask import Blueprint, request
 from flask_jwt_extended import get_jwt_identity, jwt_required
 from marshmallow import ValidationError
 
@@ -15,6 +15,7 @@ from app.schemas.auth_schema import (
 )
 from app.services.auth_service import (
     authenticate,
+    build_session_context,
     create_session,
     register_user,
     request_password_reset,
@@ -35,8 +36,6 @@ profile_update_schema = ProfileUpdateSchema()
 def register():
     payload = register_schema.load(request.get_json(silent=True) or {})
     user, _code = register_user(payload)
-    if current_app.config["DEBUG"] and current_app.config["OTP_DELIVERY_MODE"] == "console":
-        current_app.logger.info("A development verification code was written to the app log for %s.", user.email)
     return {"message": "Registration received. Verify your email to continue.", "email": user.email, "verificationRequired": True}, 201
 
 
@@ -70,7 +69,7 @@ def me():
     user = db.session.get(User, get_jwt_identity())
     if user is None or not user.is_active:
         raise ApiError("The authenticated account is not available.", 401)
-    return {"user": user.to_dict()}
+    return build_session_context(user)
 
 
 @auth_bp.post("/password-reset/request")

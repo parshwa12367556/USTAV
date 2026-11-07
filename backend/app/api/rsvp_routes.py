@@ -16,7 +16,7 @@ class RSVPSubmitSchema(Schema):
     status = fields.String(required=True, validate=validate.OneOf(["attending", "declined", "maybe"]))
     plusOnes = fields.Integer(load_default=0, validate=validate.Range(min=0, max=20))
     dietaryNotes = fields.String(load_default=None, allow_none=True, validate=validate.Length(max=2000))
-    functionIds = fields.List(fields.String(), load_default=list)
+    functionIds = fields.List(fields.String(), load_default=None)
 
 
 rsvp_schema = RSVPSubmitSchema()
@@ -37,6 +37,11 @@ def _guest_for_token(token: str) -> Guest:
 @rsvp_bp.get("/<token>")
 def get_invitation(token: str):
     guest = _guest_for_token(token)
+    invited_function_ids = [mapping.function_id for mapping in guest.function_mappings]
+    if not invited_function_ids:
+        invited_function_ids = [function.id for function in guest.event.functions]
+    invited_function_set = set(invited_function_ids)
+    responses = {response.function_id: response for response in guest.rsvps}
     return {
         "guestName": guest.name,
         "event": {
@@ -45,6 +50,17 @@ def get_invitation(token: str):
             "location": guest.event.location,
         },
         "status": guest.rsvp_status,
+        "functions": [
+            {
+                "id": function.id,
+                "name": function.name,
+                "date": function.date.isoformat(),
+                "venue": function.venue,
+                "status": responses[function.id].status if function.id in responses else "pending",
+            }
+            for function in sorted(guest.event.functions, key=lambda item: (item.date, item.name))
+            if function.id in invited_function_set
+        ],
     }
 
 
@@ -53,12 +69,24 @@ def submit_rsvp():
     payload = rsvp_schema.load(request.get_json(silent=True) or {})
     guest = _guest_for_token(payload["invitationToken"])
 
+    invited_function_ids = {mapping.function_id for mapping in guest.function_mappings}
+    if not invited_function_ids:
+        invited_function_ids = {function.id for function in guest.event.functions}
+    selected_function_ids = payload.get("functionIds")
+    if selected_function_ids is None:
+        selected_function_ids = list(invited_function_ids)
+    if len(selected_function_ids) != len(set(selected_function_ids)):
+        raise ValidationError({"functionIds": ["A function can only be selected once."]})
+    if any(function_id not in invited_function_ids for function_id in selected_function_ids):
+        raise ValidationError({"functionIds": ["A selected function is not part of this invitation."]})
+    if invited_function_ids and not selected_function_ids:
+        raise ValidationError({"functionIds": ["Select at least one function to RSVP to."]})
+
+    functions_by_id = {function.id: function for function in guest.event.functions}
     guest.rsvp_status = payload["status"]
     guest.plus_ones = payload.get("plusOnes", 0) if guest.rsvp_status == "attending" else 0
-    for function_id in payload.get("functionIds", []):
-        function = next((item for item in guest.event.functions if item.id == function_id), None)
-        if function is None:
-            raise ValidationError({"functionIds": ["A selected function does not belong to this invitation."]})
+    for function_id in selected_function_ids:
+        function = functions_by_id[function_id]
         response = db.session.scalar(
             db.select(RSVP).where(RSVP.guest_id == guest.id, RSVP.function_id == function.id)
         )

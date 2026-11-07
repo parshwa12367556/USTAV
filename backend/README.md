@@ -2,7 +2,7 @@
 
 ## Local setup
 
-1. Install/start PostgreSQL, then create a database named `utsav` and a database user with access to it.
+1. Set up the app in a local SQLite environment. The project creates `backend/instance/utsav.db` automatically.
 2. From the `backend` directory, create your local environment file and open it:
 
    ```powershell
@@ -10,7 +10,7 @@
    notepad .env
    ```
 
-   Set `SECRET_KEY` and `JWT_SECRET_KEY` to different random secrets (at least 32 characters each). Set `DATABASE_URL` to your PostgreSQL connection URL, for example `postgresql+psycopg://<user>:<password>@localhost:5432/utsav`, replacing the placeholders with your local database credentials. Do not commit `.env` or share its secrets.
+   Set `SECRET_KEY` and `JWT_SECRET_KEY` to different random secrets (at least 32 characters each). Set `DATABASE_URL` to the SQLite file used by the app, for example `sqlite:///instance/utsav.db`. The application resolves this to an absolute path under `backend/instance/` automatically, so it does not depend on the terminal working directory. Do not commit `.env` or share its secrets.
 
    You can generate two independent secrets in PowerShell with:
 
@@ -22,7 +22,7 @@
 3. From the `backend` directory, install dependencies, apply migrations, and start the development server:
 
    ```powershell
-   python -m pip install -r requirements/development.txt
+   python -m pip install -r requirements.txt
    flask --app run db upgrade
    python run.py
    ```
@@ -37,7 +37,9 @@ Install `requirements/production.txt`, set production environment variables, and
 
 Email verification and password recovery use SMTP when `OTP_DELIVERY_MODE=smtp`; configure `MAIL_SERVER`, `MAIL_PORT`, `MAIL_USE_TLS`, and `MAIL_DEFAULT_SENDER`, and set `MAIL_USERNAME`/`MAIL_PASSWORD` when the server requires authentication. Local console mode logs verification codes only in development. Code expiry is controlled by `OTP_EXPIRY_MINUTES`.
 
-Online payments use Razorpay. Set `RAZORPAY_KEY_ID` and `RAZORPAY_KEY_SECRET` in `.env` to enable checkout, and configure `RAZORPAY_WEBHOOK_SECRET` to accept webhooks. Register `POST /api/v1/payments/webhooks/razorpay` in the Razorpay dashboard for the `payment.captured` and `payment.failed` events. Keep all secrets server-side; only the public key ID is returned to the frontend. The automated test suite mocks provider requests and does not connect to Razorpay, PostgreSQL, or SMTP.
+For local registration testing only, set `OTP_FIXED_CODE=987654` to use the same verification code for each new registration. This setting is honored only when debug mode and console OTP delivery are both enabled; it is ignored in production and SMTP mode. Do not enable a fixed code in a deployed environment.
+
+Online payments use Razorpay. Set `RAZORPAY_KEY_ID` and `RAZORPAY_KEY_SECRET` in `.env` to enable checkout, and configure `RAZORPAY_WEBHOOK_SECRET` to accept webhooks. Register `POST /api/v1/payments/webhooks/razorpay` in the Razorpay dashboard for the `payment.captured` and `payment.failed` events. Keep all secrets server-side; only the public key ID is returned to the frontend. The automated test suite mocks provider requests and does not connect to Razorpay or SMTP.
 
 The migrations include a starter invitation template collection and support password-reset codes. Configure SMTP delivery before enabling account recovery in a production environment.
 
@@ -61,7 +63,7 @@ CSV exports are available at `/api/v1/admin/reports?type=bookings`, `type=paymen
 
 ## Tests
 
-The test suite uses an isolated SQLite database and does not require PostgreSQL credentials:
+The test suite uses an isolated SQLite database and does not require PostgreSQL credentials or a running PostgreSQL server:
 
 ```powershell
 python -m pytest

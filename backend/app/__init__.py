@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import Any
 
 from flask import Flask, jsonify
-from sqlalchemy import text
+from sqlalchemy import event, text
 from sqlalchemy.exc import SQLAlchemyError
 
 from app.config import get_config
@@ -38,7 +38,28 @@ def create_app(config_name: str | None = None, overrides: dict[str, Any] | None 
     Path(app.config["UPLOAD_FOLDER"]).mkdir(parents=True, exist_ok=True)
 
     db.init_app(app)
+    if app.config["SQLALCHEMY_DATABASE_URI"].startswith("sqlite"):
+        with app.app_context():
+            @event.listens_for(db.engine, "connect")
+            def _set_sqlite_pragma(dbapi_connection, _connection_record):
+                cursor = dbapi_connection.cursor()
+                cursor.execute("PRAGMA foreign_keys=ON")
+                cursor.close()
+
     migrate.init_app(app, db)
+    with app.app_context():
+        from sqlalchemy import inspect
+
+        table_names = inspect(db.engine).get_table_names()
+        if not table_names:
+            db.create_all()
+            table_names = inspect(db.engine).get_table_names()
+        if "alembic_version" not in table_names:
+            try:
+                migrate.stamp(revision="head")
+            except Exception:
+                pass
+
     jwt.init_app(app)
     ma.init_app(app)
     cors.init_app(

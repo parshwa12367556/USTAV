@@ -43,6 +43,10 @@ type IconName =
   | 'sparkle'
   | 'menu';
 
+function getInitials(name: string) {
+  return name.trim().split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]?.toUpperCase() ?? '').join('') || 'U';
+}
+
 export function Icon({ name, size = 18 }: { name: IconName; size?: number }) {
   const paths: Record<IconName, React.ReactNode> = {
     grid: <><rect x="3" y="3" width="7" height="7" rx="1.5" /><rect x="14" y="3" width="7" height="7" rx="1.5" /><rect x="3" y="14" width="7" height="7" rx="1.5" /><rect x="14" y="14" width="7" height="7" rx="1.5" /></>,
@@ -198,7 +202,7 @@ const catalogTitles: Record<string, string> = {
 export function WorkspaceLayout() {
   const location = useLocation();
   const navigate = useNavigate();
-  const { user, isAuthenticated } = useAuth();
+  const { user, activeRole, activeWorkspace, isAuthenticated } = useAuth();
   const [events, setEvents] = useState<EventRecord[]>(() => {
     try {
       const saved = localStorage.getItem('utsav-events');
@@ -222,6 +226,11 @@ export function WorkspaceLayout() {
     eyebrow: location.pathname.startsWith('/admin/') ? 'THE UTSAV CONTROL ROOM' : location.pathname.startsWith('/vendor/') ? 'YOUR BUSINESS, ALL TOGETHER' : 'PLAN THE MOMENTS THAT MATTER',
   };
   const sidebarNavigation = location.pathname.startsWith('/admin') ? adminNavigation : location.pathname.startsWith('/vendor') ? vendorNavigation : navigation;
+  const displayName = user?.name?.trim() || 'Your account';
+  const displayInitials = getInitials(displayName);
+  const workspaceName = activeWorkspace?.name || (activeRole === 'admin' ? 'Admin console' : activeRole === 'vendor' ? 'Vendor studio' : 'Family workspace');
+  const workspaceRoleLabel = activeRole === 'admin' ? 'Admin workspace' : activeRole === 'vendor' ? 'Vendor workspace' : 'Family workspace';
+  const profileRoleLabel = activeRole === 'admin' ? 'Platform admin' : activeRole === 'vendor' ? 'Business owner' : 'Family admin';
 
   useEffect(() => {
     if (!isAuthenticated) return;
@@ -294,8 +303,8 @@ export function WorkspaceLayout() {
         </NavLink>
 
         <button className="workspace-switcher" aria-expanded={workspaceMenuOpen} onClick={() => setWorkspaceMenuOpen((open) => !open)}>
-          <span className="workspace-avatar">S</span>
-          <span className="workspace-switcher-copy"><strong>Sharma family</strong><small>Family workspace</small></span>
+          <span className="workspace-avatar">{workspaceName.slice(0, 1).toUpperCase() || 'U'}</span>
+          <span className="workspace-switcher-copy"><strong>{workspaceName}</strong><small>{workspaceRoleLabel}</small></span>
           <Icon name="chevron" size={16} />
         </button>
         {workspaceMenuOpen && <div className="workspace-menu"><span>SWITCH YOUR SPACE</span><button onClick={() => { navigate('/'); setWorkspaceMenuOpen(false); }}><i>F</i><span><strong>Family workspace</strong><small>Plan your celebrations</small></span>{location.pathname !== '/admin' && location.pathname !== '/vendor' && <b>✓</b>}</button><button onClick={() => { navigate('/vendor'); setWorkspaceMenuOpen(false); }}><i>V</i><span><strong>Vendor studio</strong><small>Manage your business</small></span></button><button onClick={() => { navigate('/admin'); setWorkspaceMenuOpen(false); }}><i>A</i><span><strong>Admin console</strong><small>Manage the marketplace</small></span></button></div>}
@@ -334,8 +343,8 @@ export function WorkspaceLayout() {
             <button onClick={() => setNotificationsOpen(true)}>Talk to our team <span>→</span></button>
           </div>
           <NavLink to="/settings" className="profile-link">
-            <span className="avatar avatar--profile">PS</span>
-            <span className="profile-copy"><strong>Priya Sharma</strong><small>Family admin</small></span>
+            <span className="avatar avatar--profile">{displayInitials}</span>
+            <span className="profile-copy"><strong>{displayName}</strong><small>{profileRoleLabel}</small></span>
             <Icon name="chevron" size={16} />
           </NavLink>
         </div>

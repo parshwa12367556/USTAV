@@ -5,6 +5,13 @@ export type GuestInvitation = {
   guestName: string;
   event: { name: string; date: string; location?: string | null };
   status: RSVPResponse['status'] | 'pending';
+  functions: Array<{
+    id: string;
+    name: string;
+    date: string;
+    venue?: string | null;
+    status: RSVPResponse['status'] | 'pending';
+  }>;
 };
 
 export const rsvpApi = {
