@@ -12,4 +12,16 @@ export const vendorsApi = {
     const response = await apiClient.get<Vendor>(`/vendors/${encodeURIComponent(id)}`);
     return response.data;
   },
+  async getMyProfile(): Promise<Vendor> {
+    const response = await apiClient.get<Vendor>('/vendors/profile/me');
+    return response.data;
+  },
+  async updateMyProfile(input: Partial<Pick<Vendor, 'name' | 'category' | 'city' | 'startingPrice' | 'description'>>): Promise<Vendor> {
+    const response = await apiClient.patch<Vendor>('/vendors/profile/me', input);
+    return response.data;
+  },
+  async createMyProfile(input: Pick<Vendor, 'name' | 'category' | 'city'> & Partial<Pick<Vendor, 'startingPrice' | 'description'>>): Promise<Vendor> {
+    const response = await apiClient.post<Vendor>('/vendors/profile', input);
+    return response.data;
+  },
 };

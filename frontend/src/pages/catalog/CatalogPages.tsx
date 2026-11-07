@@ -4,6 +4,15 @@ import axios from 'axios';
 import { Icon } from '../../layouts/WorkspaceLayout';
 import { formatDate, guests, vendors } from '../../data/workspaceData';
 import { authApi } from '../../features/auth/api/authApi';
+import { adminApi } from '../../features/admin/api/adminApi';
+import { cateringApi } from '../../features/catering/api/cateringApi';
+import { eventsApi } from '../../features/events/api/eventsApi';
+import { guestsApi } from '../../features/guests/api/guestsApi';
+import { invitationsApi } from '../../features/invitations/api/invitationsApi';
+import { paymentsApi } from '../../features/payments/api/paymentsApi';
+import { quotationsApi } from '../../features/quotations/api/quotationsApi';
+import { venuesApi } from '../../features/venues/api/venuesApi';
+import type { Quotation } from '../../types/quotation.types';
 import { useAuth } from '../../hooks/useAuth';
 import { usePersistentState } from '../../hooks/usePersistentState';
 
@@ -12,6 +21,8 @@ type CatalogItem = {
   detail: string;
   date: string;
   status: string;
+  entityId?: string;
+  quotation?: Quotation;
 };
 
 type PageSpec = {
@@ -41,7 +52,7 @@ const specs: PageSpec[] = [
   { path: '/register', title: 'Let’s make room for a celebration.', eyebrow: 'A LITTLE JOY STARTS HERE', description: 'Create your free account and bring your family’s plans together.', section: 'auth', action: 'Create my account', mode: 'auth', fields: ['Your name', 'Email address', 'Phone number', 'Create a password'] },
   { path: '/verify-otp', title: 'One quick check, then you’re in.', eyebrow: 'A LITTLE SECURITY FOR YOUR SPACE', description: 'Enter the six-digit code we sent to your phone or email.', section: 'auth', action: 'Verify my code', mode: 'auth', fields: ['Verification code'] },
   { path: '/forgot-password', title: 'A fresh start is one email away.', eyebrow: 'IT HAPPENS TO THE BEST OF US', description: 'Share your email and we’ll send a secure link to help you back in.', section: 'auth', action: 'Send me a reset link', mode: 'auth', fields: ['Email address'] },
-  { path: '/reset-password', title: 'Choose a password that feels safe.', eyebrow: 'ALMOST BACK IN YOUR SPACE', description: 'Use at least eight characters so your plans stay yours.', section: 'auth', action: 'Save my new password', mode: 'auth', fields: ['New password', 'Confirm new password'] },
+  { path: '/reset-password', title: 'Choose a password that feels safe.', eyebrow: 'ALMOST BACK IN YOUR SPACE', description: 'Enter the reset code from your email and choose a new password.', section: 'auth', action: 'Save my new password', mode: 'auth', fields: ['Email address', 'Verification code', 'New password', 'Confirm new password'] },
   { path: '/onboarding', title: 'Let’s start with the good stuff.', eyebrow: 'YOUR SPACE, YOUR CELEBRATION', description: 'Tell us a little about your family and what you’re planning.', section: 'auth', action: 'Set up my workspace', mode: 'auth', fields: ['Family or workspace name', 'Your role', 'Celebration type', 'Celebration city'] },
 
   { path: '/events/create', title: 'A new beginning.', eyebrow: 'LET’S MAKE SOMETHING TO CELEBRATE', description: 'Start with the basics. You can add all the lovely details later.', section: 'family', action: 'Create event', mode: 'form', fields: ['Event name', 'Celebration type', 'Date', 'City or venue'] },
@@ -81,8 +92,8 @@ const specs: PageSpec[] = [
   { path: '/admin/vendors', title: 'The people behind every lovely detail.', eyebrow: 'VENDOR DIRECTORY', description: 'Review vendor profiles, verification, and marketplace activity.', section: 'admin', action: 'Add a vendor', mode: 'table', categories: ['All vendors', 'Verified', 'Needs review', 'Paused'] },
   { path: '/admin/vendor-verification', title: 'A little care builds a lot of trust.', eyebrow: 'VENDOR VERIFICATION', description: 'Review business details and portfolios before vendors meet families.', section: 'admin', action: 'Review application', mode: 'table', categories: ['Needs review', 'Verified', 'Needs changes'] },
   { path: '/admin/categories', title: 'Help families find the right kind of help.', eyebrow: 'SERVICE CATEGORIES', description: 'Keep marketplace categories useful, clear, and easy to browse.', section: 'admin', action: 'Create a category', mode: 'table' },
-  { path: '/admin/venues', title: 'Places families can gather.', eyebrow: 'VENUE DIRECTORY', description: 'Review venue details, coverage, and marketplace visibility.', section: 'admin', action: 'Add a venue', mode: 'table' },
-  { path: '/admin/templates', title: 'Invitations worth sharing.', eyebrow: 'TEMPLATE LIBRARY', description: 'Review invitation designs and keep the collection thoughtful.', section: 'admin', action: 'Add a template', mode: 'table', categories: ['All designs', 'Pending approval', 'Published'] },
+  { path: '/admin/venues', title: 'Places families can gather.', eyebrow: 'VENUE DIRECTORY', description: 'Review venue details, coverage, and marketplace visibility.', section: 'admin', action: 'Add a venue', mode: 'form', fields: ['Venue name', 'City', 'Guest capacity', 'Price per day', 'Amenities (comma separated)', 'Image URL'] },
+  { path: '/admin/templates', title: 'Invitations worth sharing.', eyebrow: 'TEMPLATE LIBRARY', description: 'Review invitation designs and keep the collection thoughtful.', section: 'admin', action: 'Add a template', mode: 'form', fields: ['Design name', 'Category', 'Price', 'Preview image URL'], categories: ['All designs', 'Pending approval', 'Published'] },
   { path: '/admin/bookings', title: 'A clear view of every commitment.', eyebrow: 'MARKETPLACE BOOKINGS', description: 'Monitor bookings, dates, and vendor-family commitments.', section: 'admin', action: 'Export bookings', mode: 'table' },
   { path: '/admin/payments', title: 'Payments with nothing hidden.', eyebrow: 'PLATFORM TRANSACTIONS', description: 'Review transactions and resolve payment questions with care.', section: 'admin', action: 'Export transactions', mode: 'table' },
   { path: '/admin/commissions', title: 'A fair and transparent marketplace.', eyebrow: 'PLATFORM COMMISSIONS', description: 'Review commission rules and the revenue they generate.', section: 'admin', action: 'Update commission rate', mode: 'form', fields: ['Service category', 'Commission percentage', 'Effective date'] },
@@ -176,20 +187,173 @@ function isCatalogItems(value: unknown): value is CatalogItem[] {
 export function CatalogWorkspacePage() {
   const { pathname } = useLocation();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const { isAuthenticated } = useAuth();
   const spec = findSpec(pathname);
   const initialItems = useMemo(() => defaultItems(spec), [pathname]);
-  const [items, setItems, storageError] = usePersistentState(`utsav-catalog:${pathname}`, initialItems, isCatalogItems);
+  const liveDataPaths = [
+    '/catering',
+    '/quotations',
+    '/payments',
+    '/vendor/quotation-requests',
+    '/vendor/quotations',
+    '/admin/users',
+    '/admin/vendors',
+    '/admin/vendor-verification',
+    '/admin/templates',
+    '/admin/venues',
+    '/rsvp',
+  ];
+  const usesRemoteData = isAuthenticated && liveDataPaths.includes(pathname);
+  const hasUnsupportedAuthenticatedWorkflow = isAuthenticated &&
+    spec.section !== 'public' && spec.section !== 'auth' && spec.section !== 'guest' &&
+    !liveDataPaths.includes(pathname);
+  const [savedItems, setSavedItems, storageError] = usePersistentState(
+    `utsav-catalog:${pathname}`,
+    initialItems,
+    isCatalogItems,
+  );
+  const [remoteItems, setRemoteItems] = useState<CatalogItem[]>([]);
+  const [remoteLoading, setRemoteLoading] = useState(false);
+  const [remoteError, setRemoteError] = useState('');
+  const items = usesRemoteData ? remoteItems : hasUnsupportedAuthenticatedWorkflow ? [] : savedItems;
+  const setItems = usesRemoteData ? setRemoteItems : setSavedItems;
   const [query, setQuery] = useState('');
   const [activeCategory, setActiveCategory] = useState(spec.categories?.[0] ?? 'Everything');
   const [modalOpen, setModalOpen] = useState(false);
   const [notice, setNotice] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const [selectedQuotation, setSelectedQuotation] = useState<Quotation | null>(null);
 
   useEffect(() => {
     setQuery('');
     setActiveCategory(spec.categories?.[0] ?? 'Everything');
     setModalOpen(false);
+    setSelectedQuotation(null);
     setNotice('');
   }, [pathname]);
+
+  useEffect(() => {
+    if (!usesRemoteData) return;
+    let active = true;
+    setRemoteItems([]);
+    setRemoteLoading(true);
+    setRemoteError('');
+    const fetchItems = async (): Promise<CatalogItem[]> => {
+      if (pathname === '/quotations' || pathname === '/vendor/quotation-requests' || pathname === '/vendor/quotations') {
+        const quotations = await quotationsApi.list();
+        return quotations.map((item) => ({
+          entityId: item.id,
+          name: item.title,
+          detail: pathname === '/vendor/quotation-requests'
+            ? `${item.eventName ?? `Event ${item.eventId}`} · ${item.guestCount ?? 0} guests`
+            : item.vendorName ?? `Vendor · ${item.vendorId}`,
+          date: pathname === '/vendor/quotation-requests'
+            ? item.eventDate ?? 'Date not set'
+            : item.validUntil ?? 'No expiry set',
+          status: pathname === '/vendor/quotation-requests' && item.status === 'draft'
+            ? 'New request'
+            : item.status,
+          quotation: item,
+        }));
+      }
+      if (pathname === '/payments') {
+        const payments = await paymentsApi.list();
+        return payments.map((item) => ({
+          entityId: item.id,
+          name: item.invoiceNumber,
+          detail: `${item.currency} ${item.amount.toLocaleString('en-IN')}`,
+          date: item.paidAt ? formatDate(item.paidAt.slice(0, 10)) : '—',
+          status: item.status,
+        }));
+      }
+      if (pathname === '/admin/users') {
+        const users = await adminApi.listUsers();
+        return users.map((item) => ({
+          entityId: item.id,
+          name: item.name,
+          detail: `${item.role} · ${item.email}`,
+          date: '—',
+          status: item.status,
+        }));
+      }
+      if (pathname === '/admin/vendors' || pathname === '/admin/vendor-verification') {
+        const vendors = await adminApi.listVendors();
+        return vendors.map((item) => ({
+          entityId: item.id,
+          name: item.name,
+          detail: `${item.category} · ${item.city}`,
+          date: '—',
+          status: item.verificationStatus === 'pending'
+            ? 'Needs review'
+            : item.verificationStatus === 'verified' ? 'Verified' : 'Rejected',
+        }));
+      }
+      if (pathname === '/admin/templates') {
+        const templates = await invitationsApi.listTemplates();
+        return templates.map((item) => ({
+          entityId: item.id,
+          name: item.name,
+          detail: item.category,
+          date: item.price ? `₹${item.price.toLocaleString('en-IN')}` : 'Free',
+          status: 'Published',
+        }));
+      }
+      if (pathname === '/admin/venues') {
+        const venues = await venuesApi.list();
+        return venues.map((item) => ({
+          entityId: item.id,
+          name: item.name,
+          detail: `${item.city} · capacity ${item.capacity}`,
+          date: `₹${item.pricePerDay.toLocaleString('en-IN')} / day`,
+          status: 'Active',
+        }));
+      }
+      if (pathname === '/catering') {
+        const caterers = await cateringApi.listCaterers();
+        const menus = await Promise.all(caterers.map(async (vendor) => {
+          const vendorMenus = await cateringApi.listMenus(vendor.id);
+          return vendorMenus.map((menu) => ({
+            entityId: menu.id,
+            name: menu.name,
+            detail: `${vendor.name} · ₹${menu.pricePerPlate.toLocaleString('en-IN')} per plate`,
+            date: vendor.city,
+            status: menu.description || 'Menu available',
+          }));
+        }));
+        return menus.flat();
+      }
+      if (pathname === '/rsvp') {
+        const events = await eventsApi.list();
+        if (!events[0]) return [];
+        const guests = await guestsApi.list(events[0].id);
+        return guests.map((guest) => ({
+          entityId: guest.id,
+          name: guest.name,
+          detail: `${guest.group ?? 'Guest'} · ${guest.email ?? guest.phone ?? 'No contact provided'}`,
+          date: events[0].name,
+          status: guest.rsvpStatus,
+        }));
+      }
+      return [];
+    };
+    fetchItems()
+      .then((result) => {
+        if (active) setRemoteItems(result);
+      })
+      .catch((cause: unknown) => {
+        if (active) {
+          setRemoteItems([]);
+          setRemoteError(cause instanceof Error ? cause.message : 'Unable to load this section.');
+        }
+      })
+      .finally(() => {
+        if (active) setRemoteLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [pathname, usesRemoteData]);
 
   const visibleItems = useMemo(() => items.filter((item) =>
     `${item.name} ${item.detail} ${item.status}`.toLowerCase().includes(query.toLowerCase()) &&
@@ -199,28 +363,178 @@ export function CatalogWorkspacePage() {
       (activeCategory === 'Needs attention' ? item.status === 'Needs attention' || item.status === 'Needs review' : item.status.toLowerCase().includes(activeCategory.toLowerCase()))),
   ), [activeCategory, items, query]);
 
-  const submitForm = (event: FormEvent<HTMLFormElement>) => {
+  const submitForm = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const formData = new FormData(event.currentTarget);
     const values = [...formData.values()].map(String);
     const label = values.find(Boolean) ?? 'New item';
+    if (pathname === '/invitation-editor') {
+      const invitationId = searchParams.get('invitation');
+      if (!invitationId) {
+        setRemoteError('Choose an invitation design and event before opening the editor.');
+        return;
+      }
+      setSubmitting(true);
+      setRemoteError('');
+      try {
+        const invitation = await invitationsApi.update(invitationId, {
+          title: values[0],
+          status: 'published',
+          design: {
+            names: values[0],
+            message: values[1] ?? '',
+            date: values[2] ?? '',
+            venue: values[3] ?? '',
+          },
+        });
+        setModalOpen(false);
+        setNotice(invitation.shareToken
+          ? `Invitation published. Share ${window.location.origin}/invite/${invitation.shareToken}`
+          : 'Invitation saved.');
+      } catch (cause) {
+        setRemoteError(cause instanceof Error ? cause.message : 'Unable to save your invitation.');
+      } finally {
+        setSubmitting(false);
+      }
+      return;
+    }
+    if (pathname === '/admin/venues') {
+      setSubmitting(true);
+      setRemoteError('');
+      try {
+        const venue = await adminApi.createVenue({
+          name: values[0].trim(),
+          city: values[1].trim(),
+          capacity: Number(values[2]),
+          pricePerDay: Number(values[3]),
+          amenities: (values[4] ?? '').split(',').map((item) => item.trim()).filter(Boolean),
+          imageUrl: values[5]?.trim() || undefined,
+        });
+        setRemoteItems((current) => [{
+          entityId: venue.id,
+          name: venue.name,
+          detail: `${venue.city} · capacity ${venue.capacity}`,
+          date: `₹${venue.pricePerDay.toLocaleString('en-IN')} / day`,
+          status: 'Active',
+        }, ...current]);
+        setModalOpen(false);
+        setNotice(`${venue.name} was added to the venue directory.`);
+      } catch (cause) {
+        setRemoteError(cause instanceof Error ? cause.message : 'Unable to add this venue.');
+      } finally {
+        setSubmitting(false);
+      }
+      return;
+    }
+    if (pathname === '/admin/templates') {
+      setSubmitting(true);
+      setRemoteError('');
+      try {
+        const template = await adminApi.createInvitationTemplate({
+          name: values[0].trim(),
+          category: values[1].trim(),
+          price: Number(values[2] || 0),
+          previewUrl: values[3]?.trim() || undefined,
+        });
+        setRemoteItems((current) => [{
+          entityId: template.id,
+          name: template.name,
+          detail: template.category,
+          date: template.price ? `₹${template.price.toLocaleString('en-IN')}` : 'Free',
+          status: 'Published',
+        }, ...current]);
+        setModalOpen(false);
+        setNotice(`${template.name} was added to the invitation collection.`);
+      } catch (cause) {
+        setRemoteError(cause instanceof Error ? cause.message : 'Unable to add this invitation template.');
+      } finally {
+        setSubmitting(false);
+      }
+      return;
+    }
+    if (isAuthenticated) {
+      setRemoteError(`${spec.action} is not connected to a backend workflow yet. No changes were saved.`);
+      return;
+    }
     setItems((current) => [{ name: label, detail: values.slice(1).filter(Boolean).join(' · ') || 'Added to your workspace', date: formatDate(new Date().toISOString().slice(0, 10)), status: 'Planning' }, ...current]);
     setModalOpen(false);
     setNotice('Saved. Your new details are right here.');
   };
 
-  const saveAction = (item: CatalogItem) => {
+  const saveAction = async (item: CatalogItem) => {
     if (spec.section === 'public') {
       navigate('/register');
       return;
     }
     if (spec.section === 'vendor' && (pathname === '/vendor/quotation-requests' || pathname === '/vendor/quotations')) {
-      setItems((current) => current.map((entry) => entry === item ? { ...entry, status: 'Replied' } : entry));
-      setNotice(`A reply is ready for ${item.name}.`);
+      if (!item.quotation) {
+        setRemoteError('This quotation request is missing its server record. Refresh and try again.');
+        return;
+      }
+      setSelectedQuotation(item.quotation);
+      return;
+    }
+    if (pathname === '/quotations' && item.entityId && item.status === 'sent') {
+      try {
+        const updated = await quotationsApi.updateStatus(item.entityId, 'accepted');
+        setItems((current) => current.map((entry) => entry.entityId === item.entityId ? { ...entry, status: updated.status } : entry));
+        setNotice(`Accepted ${item.name}.`);
+      } catch (cause) {
+        setRemoteError(cause instanceof Error ? cause.message : 'Unable to update this quotation.');
+      }
+      return;
+    }
+    if (pathname === '/admin/vendor-verification' && item.entityId && item.status === 'Needs review') {
+      try {
+        const updated = await adminApi.updateVendorVerification(item.entityId, 'verified');
+        setItems((current) => current.map((entry) => entry.entityId === item.entityId ? { ...entry, status: updated.verificationStatus === 'verified' ? 'Verified' : 'Needs review' } : entry));
+        setNotice(`Verified ${item.name}.`);
+      } catch (cause) {
+        setRemoteError(cause instanceof Error ? cause.message : 'Unable to update vendor verification.');
+      }
+      return;
+    }
+    if (pathname === '/payments') {
+      setRemoteError('Checkout is not enabled until a payment provider is configured.');
+      return;
+    }
+    if (hasUnsupportedAuthenticatedWorkflow) {
+      setRemoteError(`This action for ${item.name} is not connected to a backend workflow yet.`);
       return;
     }
     setItems((current) => current.map((entry) => entry === item ? { ...entry, status: actionStatus(entry.status) } : entry));
     setNotice(`Updated “${item.name}”.`);
+  };
+
+  const sendVendorReply = async (
+    quotation: Quotation,
+    input: {
+      title: string;
+      items: Array<{ description: string; quantity: number; unitPrice: number }>;
+      validUntil?: string;
+    },
+  ) => {
+    setSubmitting(true);
+    setRemoteError('');
+    try {
+      const updated = await quotationsApi.sendVendorReply(quotation.id, input);
+      setRemoteItems((current) => current.map((entry) => entry.entityId === updated.id
+        ? {
+          ...entry,
+          quotation: updated,
+          name: updated.title,
+          date: updated.validUntil ?? 'No expiry set',
+          status: updated.status,
+          detail: `${updated.vendorName ?? 'Your proposal'} · ₹${(updated.total ?? 0).toLocaleString('en-IN')}`,
+        }
+        : entry));
+      setSelectedQuotation(null);
+      setNotice(`Your priced quotation for ${updated.title} was sent.`);
+    } catch (cause) {
+      setRemoteError(cause instanceof Error ? cause.message : 'Unable to send this quotation.');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   if (spec.section === 'public') return spec.mode === 'confirmation' ? <ConfirmationPage spec={spec} /> : <PublicPage spec={spec} />;
@@ -237,7 +551,7 @@ export function CatalogWorkspacePage() {
     <div className="catalog-page screen-stack">
       <section className={`catalog-intro catalog-intro--${spec.section}`}>
         <div><span className="eyebrow">{spec.eyebrow}</span><h2>{spec.title}</h2><p>{spec.description}</p></div>
-        <button className="button button--primary" onClick={() => spec.mode === 'form' || spec.mode === 'editor' ? setModalOpen(true) : setNotice(spec.section === 'admin' ? 'Your report is ready to review.' : 'You’re all caught up.')}><Icon name="plus" size={16} />{spec.action}</button>
+        <button className="button button--primary" onClick={() => spec.mode === 'form' || spec.mode === 'editor' ? setModalOpen(true) : pathname === '/vendor/quotations' || pathname === '/vendor/quotation-requests' ? setNotice('Choose a request below to prepare a priced quotation.') : setNotice(spec.section === 'admin' ? 'Your report is ready to review.' : 'You’re all caught up.')}><Icon name="plus" size={16} />{spec.action}</button>
       </section>
 
       <section className="catalog-stat-grid">
@@ -248,7 +562,10 @@ export function CatalogWorkspacePage() {
 
       <section className="content-card catalog-list-card">
         {storageError && <p className="form-error" role="alert">{storageError}</p>}
-        <div className="list-toolbar"><div><h2>{spec.section === 'admin' ? 'The latest activity' : spec.section === 'vendor' ? 'Your studio at a glance' : spec.path === '/rsvp' ? 'The people who’ve replied' : 'Your details, all together'}</h2><p className="section-description">{spec.section === 'admin' ? 'A careful overview of what’s happening across Utsav.' : 'Search, review, and take the next thoughtful step.'}</p></div><button className="button button--outline" onClick={() => setModalOpen(true)}><Icon name="plus" size={15} />{spec.action}</button></div>
+        {hasUnsupportedAuthenticatedWorkflow && <p className="form-error" role="alert">This section does not have a connected backend workflow yet. Demo data is hidden while you are signed in.</p>}
+        {remoteError && <p className="form-error" role="alert">{remoteError}</p>}
+        {remoteLoading && <p role="status">Loading live data…</p>}
+        <div className="list-toolbar"><div><h2>{spec.section === 'admin' ? 'The latest activity' : spec.section === 'vendor' ? 'Your studio at a glance' : spec.path === '/rsvp' ? 'The people who’ve replied' : 'Your details, all together'}</h2><p className="section-description">{spec.section === 'admin' ? 'A careful overview of what’s happening across Utsav.' : 'Search, review, and take the next thoughtful step.'}</p></div>{(spec.mode === 'form' || spec.mode === 'editor') && <button className="button button--outline" onClick={() => setModalOpen(true)}><Icon name="plus" size={15} />{spec.action}</button>}</div>
         <div className="catalog-tools"><div className="inline-search"><Icon name="search" size={16} /><input placeholder={`Search ${spec.title.toLowerCase()}...`} value={query} onChange={(event) => setQuery(event.target.value)} /></div>{spec.categories && <div className="filter-tabs">{spec.categories.map((category) => <button className={activeCategory === category ? 'filter-tab filter-tab--active' : 'filter-tab'} key={category} onClick={() => setActiveCategory(category)}>{category}</button>)}</div>}</div>
         <div className="catalog-table-wrap"><div className="catalog-row catalog-row--header"><span>NAME</span><span>DETAILS</span><span>DATE</span><span>STATUS</span><span /></div>
           {visibleItems.map((item, index) => <article className="catalog-row" key={`${item.name}-${index}`}><div className="catalog-name"><span className={`catalog-avatar catalog-avatar--${index % 4}`}>{item.name.split(/\s+/).slice(0, 2).map((word) => word[0]).join('').toUpperCase()}</span><strong>{item.name}</strong></div><span className="catalog-detail">{item.detail}</span><span className="catalog-date">{item.date}</span><span className={`catalog-status catalog-status--${item.status.toLowerCase().replaceAll(' ', '-')}`}>{item.status}</span><button className="button button--outline catalog-row-action" onClick={() => saveAction(item)}>{item.status === 'New request' ? 'Reply' : item.status === 'Needs review' ? 'Review' : item.status === 'Pending' ? 'Follow up' : 'View'} <span>↗</span></button></article>)}
@@ -259,14 +576,73 @@ export function CatalogWorkspacePage() {
 
       <div className="tip-banner"><span>✦</span><p><strong>A thoughtful next step</strong> Keep your details up to date. It makes the whole celebration easier for everyone involved.</p></div>
       {notice && <div className="catalog-toast" role="status"><span>✓</span>{notice}<button onClick={() => setNotice('')} aria-label="Dismiss">×</button></div>}
-      {modalOpen && <CatalogModal spec={spec} onClose={() => setModalOpen(false)} onSubmit={submitForm} />}
+      {modalOpen && <CatalogModal spec={spec} onClose={() => setModalOpen(false)} onSubmit={submitForm} submitting={submitting} />}
+      {selectedQuotation && <VendorQuotationReplyModal
+        quotation={selectedQuotation}
+        saving={submitting}
+        onClose={() => setSelectedQuotation(null)}
+        onSubmit={(input) => sendVendorReply(selectedQuotation, input)}
+      />}
     </div>
   );
 }
 
-function CatalogModal({ spec, onClose, onSubmit }: { spec: PageSpec; onClose: () => void; onSubmit: (event: FormEvent<HTMLFormElement>) => void }) {
+function VendorQuotationReplyModal({
+  quotation,
+  saving,
+  onClose,
+  onSubmit,
+}: {
+  quotation: Quotation;
+  saving: boolean;
+  onClose: () => void;
+  onSubmit: (input: {
+    title: string;
+    items: Array<{ description: string; quantity: number; unitPrice: number }>;
+    validUntil?: string;
+  }) => Promise<void>;
+}) {
+  const [error, setError] = useState('');
+  return (
+    <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !saving) onClose(); }}>
+      <section className="modal-card" role="dialog" aria-modal="true" aria-labelledby="vendor-quotation-title">
+        <div className="modal-top"><span className="modal-kicker"><Icon name="sparkle" size={16} /> A clear proposal, thoughtfully shared</span><button className="plain-icon" aria-label="Close" onClick={onClose} disabled={saving}><Icon name="close" /></button></div>
+        <h2 id="vendor-quotation-title">Prepare your quotation.</h2>
+        <p className="modal-description">Add at least one priced line item before sending this proposal.</p>
+        <form className="event-form" onSubmit={async (event) => {
+          event.preventDefault();
+          const form = new FormData(event.currentTarget);
+          setError('');
+          try {
+            await onSubmit({
+              title: String(form.get('title') ?? '').trim(),
+              validUntil: String(form.get('validUntil') ?? '') || undefined,
+              items: [{
+                description: String(form.get('description') ?? '').trim(),
+                quantity: Number(form.get('quantity')),
+                unitPrice: Number(form.get('unitPrice')),
+              }],
+            });
+          } catch (cause) {
+            setError(cause instanceof Error ? cause.message : 'Unable to send this quotation.');
+          }
+        }}>
+          <label>Proposal title<input name="title" required minLength={2} defaultValue={quotation.title} /></label>
+          <label>Service or inclusion<input name="description" required maxLength={255} defaultValue={quotation.items[0]?.description ?? ''} /></label>
+          <label>Quantity<input name="quantity" required type="number" min="0.01" step="0.01" defaultValue={quotation.items[0]?.quantity ?? 1} /></label>
+          <label>Price per unit (₹)<input name="unitPrice" required type="number" min="0" step="0.01" defaultValue={quotation.items[0]?.unitPrice ?? ''} /></label>
+          <label>Valid until<input name="validUntil" type="date" defaultValue={quotation.validUntil ?? ''} /></label>
+          {error && <p className="form-error" role="alert">{error}</p>}
+          <div className="modal-actions"><button type="button" className="button button--quiet" onClick={onClose} disabled={saving}>Cancel</button><button type="submit" className="button button--primary" disabled={saving}>{saving ? 'Sending…' : 'Send quotation'} <span>→</span></button></div>
+        </form>
+      </section>
+    </div>
+  );
+}
+
+function CatalogModal({ spec, onClose, onSubmit, submitting }: { spec: PageSpec; onClose: () => void; onSubmit: (event: FormEvent<HTMLFormElement>) => void | Promise<void>; submitting: boolean }) {
   const fields = spec.fields ?? ['Name', 'Description', 'Date', 'Notes'];
-  return <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}><section className="modal-card" role="dialog" aria-modal="true" aria-labelledby="catalog-modal-title"><div className="modal-top"><span className="modal-kicker"><Icon name="sparkle" size={16} /> A thoughtful next step</span><button className="plain-icon" aria-label="Close" onClick={onClose}><Icon name="close" /></button></div><h2 id="catalog-modal-title">{spec.action}.</h2><p className="modal-description">{spec.description}</p><form className="event-form" onSubmit={onSubmit}>{fields.map((field, index) => <label key={field}>{field}{field.toLowerCase().includes('date') ? <input type="date" name={field} required={index === 0} /> : field.toLowerCase().includes('message') || field.toLowerCase().includes('notes') || field.toLowerCase().includes('introduction') || field.toLowerCase().includes('included') ? <textarea name={field} rows={3} placeholder={`Add ${field.toLowerCase()}...`} /> : field.toLowerCase().includes('type') || field.toLowerCase().includes('role') || field.toLowerCase().includes('availability') || field.toLowerCase().includes('language') ? <select name={field}><option value="">Choose one</option><option>Wedding</option><option>Family</option><option>Friends</option><option>Available</option><option>English</option><option>Other</option></select> : <input name={field} placeholder={`Enter ${field.toLowerCase()}`} required={index === 0} />}</label>)}<div className="modal-actions"><button type="button" className="button button--quiet" onClick={onClose}>Maybe later</button><button type="submit" className="button button--primary">{spec.action} <span>→</span></button></div></form></section></div>;
+  return <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !submitting) onClose(); }}><section className="modal-card" role="dialog" aria-modal="true" aria-labelledby="catalog-modal-title"><div className="modal-top"><span className="modal-kicker"><Icon name="sparkle" size={16} /> A thoughtful next step</span><button className="plain-icon" aria-label="Close" onClick={onClose} disabled={submitting}><Icon name="close" /></button></div><h2 id="catalog-modal-title">{spec.action}.</h2><p className="modal-description">{spec.description}</p><form className="event-form" onSubmit={onSubmit}>{fields.map((field, index) => { const normalized = field.toLowerCase(); const required = index === 0 || spec.path === '/admin/venues' && index < 4 || spec.path === '/admin/templates' && index < 2; return <label key={field}>{field}{normalized.includes('date') ? <input type="date" name={field} required={required} /> : normalized.includes('message') || normalized.includes('notes') || normalized.includes('introduction') || normalized.includes('included') ? <textarea name={field} rows={3} placeholder={`Add ${field.toLowerCase()}...`} /> : normalized.includes('type') || normalized.includes('role') || normalized.includes('availability') || normalized.includes('language') ? <select name={field}><option value="">Choose one</option><option>Wedding</option><option>Family</option><option>Friends</option><option>Available</option><option>English</option><option>Other</option></select> : normalized.includes('capacity') || normalized.includes('price') ? <input name={field} type="number" min={normalized.includes('capacity') ? '1' : '0'} step="0.01" required={required} placeholder={`Enter ${field.toLowerCase()}`} /> : <input name={field} type={normalized.includes('url') ? 'url' : 'text'} placeholder={`Enter ${field.toLowerCase()}`} required={required} />}</label>; })}<div className="modal-actions"><button type="button" className="button button--quiet" onClick={onClose} disabled={submitting}>Maybe later</button><button type="submit" className="button button--primary" disabled={submitting}>{submitting ? 'Saving…' : spec.action} <span>→</span></button></div></form></section></div>;
 }
 
 function PublicPage({ spec }: { spec: PageSpec }) {
@@ -298,15 +674,22 @@ function PublicFooter() {
 }
 
 function AuthPage({ spec }: { spec: PageSpec }) {
+  const location = useLocation();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const { setSession } = useAuth();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [notice, setNotice] = useState(
+    typeof location.state === 'object' && location.state !== null && 'notice' in location.state
+      ? String(location.state.notice)
+      : '',
+  );
   const fieldLabel = (field: string) => field.toLowerCase().includes('password') ? 'password' : field.toLowerCase().includes('email') ? 'email' : 'text';
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setError('');
+    setNotice('');
     setBusy(true);
     const values = new FormData(event.currentTarget);
     const email = String(values.get('email') ?? searchParams.get('email') ?? '').trim();
@@ -336,6 +719,21 @@ function AuthPage({ spec }: { spec: PageSpec }) {
         const session = await authApi.verifyOtp(email, String(values.get('code') ?? ''));
         setSession(session);
         navigate('/', { replace: true });
+        return;
+      }
+      if (spec.path === '/forgot-password') {
+        await authApi.requestPasswordReset(email);
+        navigate(`/reset-password?email=${encodeURIComponent(email)}`);
+        return;
+      }
+      if (spec.path === '/reset-password') {
+        const password = String(values.get('password') ?? '');
+        if (password !== String(values.get('confirmPassword') ?? '')) {
+          setError('The passwords do not match.');
+          return;
+        }
+        await authApi.resetPassword(email, String(values.get('code') ?? ''), password);
+        navigate('/login', { replace: true, state: { notice: 'Your password has been updated. You can sign in now.' } });
         return;
       }
       setError('This account flow is not connected yet. No changes were made.');
@@ -378,6 +776,7 @@ function AuthPage({ spec }: { spec: PageSpec }) {
               return <label key={field}>{field}<input name={name} required type={fieldLabel(field)} autoComplete={name === 'password' ? 'current-password' : name === 'email' ? 'email' : undefined} placeholder={normalized.includes('password') ? 'At least 8 characters' : normalized.includes('email') ? 'you@example.com' : `Enter ${normalized}`} minLength={normalized.includes('password') ? 8 : undefined} /></label>;
             })}
             {error && <p className="form-error" role="alert">{error}</p>}
+            {notice && <p role="status">{notice}</p>}
             {spec.path === '/login' && <Link className="forgot-link" to="/forgot-password">Forgot your password?</Link>}
             <button type="submit" className="button button--primary auth-submit" disabled={busy}>{busy ? 'Please wait…' : `${spec.action} →`}</button>
           </form>

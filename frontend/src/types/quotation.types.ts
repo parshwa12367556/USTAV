@@ -15,4 +15,9 @@ export type Quotation = {
   status: QuotationStatus;
   items: QuotationLineItem[];
   validUntil?: string;
+  vendorName?: string;
+  eventName?: string;
+  eventDate?: string;
+  guestCount?: number;
+  total?: number;
 };

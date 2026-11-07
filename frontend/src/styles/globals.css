@@ -2238,8 +2238,8 @@ a {
 
 .guest-table-row {
   display: grid;
-  grid-template-columns: minmax(180px, 1.2fr) minmax(110px, 0.8fr) minmax(190px, 1.25fr) 90px 25px;
-  min-width: 650px;
+  grid-template-columns: minmax(180px, 1.2fr) minmax(110px, 0.8fr) minmax(190px, 1.25fr) 90px auto;
+  min-width: 810px;
   align-items: center;
   gap: 11px;
   padding: 10px 8px;
@@ -3256,6 +3256,18 @@ a {
   font-size: 11px;
 }
 
+.booking-actions {
+  display: flex;
+  justify-self: end;
+  gap: 7px;
+}
+
+.payment-notice {
+  margin: 10px 0;
+  color: #42684b;
+  font-size: 13px;
+}
+
 .booking-expanded {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
@@ -3749,8 +3761,174 @@ a {
   font-size: 17px;
 }
 
+.vendor-welcome-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.vendor-booking-actions select {
+  min-height: 34px;
+  padding: 0 8px;
+  border: 1px solid #e8e1da;
+  border-radius: 6px;
+  background: #fff;
+  color: #5d5149;
+  font-size: 11px;
+}
+
 .vendor-requests-card {
   padding: 18px;
+}
+
+.workspace-members-card {
+  padding: 18px;
+}
+
+.workspace-member-list {
+  margin-top: 12px;
+}
+
+.workspace-member-row {
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 4px;
+  border-top: 1px solid #f0ece7;
+}
+
+.workspace-member-role {
+  margin-left: 6px;
+  color: #94766c;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: capitalize;
+}
+
+.workspace-member-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 7px;
+}
+
+.workspace-member-editor {
+  grid-column: 1 / -1;
+  display: grid;
+  gap: 12px;
+  padding: 13px;
+  border-radius: 7px;
+  background: #faf7f3;
+}
+
+.workspace-permission-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 9px 14px;
+}
+
+.workspace-permission-grid label {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: #625850;
+  font-size: 12px;
+}
+
+.workspace-permission-grid input {
+  accent-color: #86454d;
+}
+
+.workspace-member-editor > label,
+.workspace-invite-form > label,
+.workspace-invite-link > label {
+  display: grid;
+  gap: 6px;
+  color: #625850;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.workspace-member-editor select,
+.workspace-invite-form select,
+.workspace-invite-form input,
+.workspace-invite-link input {
+  min-height: 38px;
+  padding: 0 10px;
+  border: 1px solid #e8e1da;
+  border-radius: 6px;
+  background: #fff;
+  color: #433a34;
+  font: inherit;
+}
+
+.workspace-member-editor .workspace-member-actions {
+  grid-column: auto;
+}
+
+.workspace-invite-form {
+  display: grid;
+  gap: 15px;
+}
+
+.workspace-invite-form fieldset {
+  display: grid;
+  gap: 11px;
+  margin: 0;
+  padding: 13px;
+  border: 1px solid #eee7e0;
+  border-radius: 7px;
+}
+
+.workspace-invite-form legend {
+  padding: 0 5px;
+  color: #625850;
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.workspace-invite-form .modal-actions {
+  justify-content: flex-start;
+}
+
+.workspace-invite-link {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 8px;
+  margin-top: 14px;
+  padding: 12px;
+  border-radius: 7px;
+  background: #faf7f3;
+}
+
+.workspace-invite-link small {
+  grid-column: 1 / -1;
+  color: #8d8178;
+  font-size: 11px;
+}
+
+.workspace-invite-accept {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.workspace-invite-accept h2 {
+  margin: 0 0 5px;
+  color: #433a34;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 21px;
+  font-weight: 500;
+}
+
+.workspace-invite-accept p {
+  margin: 0;
+  color: #82766e;
+  font-size: 12px;
 }
 
 .vendor-request-list {
@@ -3764,6 +3942,25 @@ a {
   gap: 10px;
   padding: 12px 4px;
   border-top: 1px solid #f0ece7;
+}
+
+.vendor-booking-list {
+  margin-top: 14px;
+}
+
+.vendor-booking-row {
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) auto auto;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 4px;
+  border-top: 1px solid #f0ece7;
+}
+
+.vendor-booking-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 7px;
 }
 
 .avatar--request {
@@ -5700,6 +5897,20 @@ a {
     font-size: 14px;
   }
 
+  .guest-row-actions {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 5px;
+  }
+
+  .guest-row-actions .plain-icon {
+    min-width: 28px;
+    padding: 3px;
+    color: #80665b;
+    font-size: 10px;
+  }
+
   .template-info {
     flex: 1;
     padding: 4px;
@@ -5942,7 +6153,7 @@ a {
     justify-self: end;
   }
 
-  .booking-details {
+  .booking-actions {
     grid-column: 3;
     grid-row: 2;
   }
@@ -6001,12 +6212,14 @@ a {
   }
 
   .admin-review-card,
-  .vendor-requests-card {
+  .vendor-requests-card,
+  .workspace-members-card {
     padding: 14px 12px;
   }
 
   .admin-review-card .list-toolbar,
-  .vendor-requests-card .list-toolbar {
+  .vendor-requests-card .list-toolbar,
+  .workspace-members-card .list-toolbar {
     gap: 8px;
   }
 
@@ -6019,6 +6232,40 @@ a {
   .admin-vendor-row {
     grid-template-columns: 31px minmax(115px, 1fr) auto;
     gap: 7px;
+  }
+
+  .vendor-booking-row {
+    grid-template-columns: minmax(115px, 1fr) auto;
+    gap: 7px;
+  }
+
+  .vendor-booking-row .vendor-booking-actions {
+    grid-column: 1 / -1;
+    justify-content: flex-end;
+  }
+
+  .workspace-member-row {
+    grid-template-columns: 1fr;
+  }
+
+  .workspace-member-actions {
+    justify-content: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .workspace-permission-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .workspace-invite-link,
+  .workspace-invite-accept {
+    grid-template-columns: 1fr;
+    align-items: stretch;
+  }
+
+  .workspace-invite-accept {
+    flex-direction: column;
+    align-items: flex-start;
   }
 
   .admin-vendor-name strong {

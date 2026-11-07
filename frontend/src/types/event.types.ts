@@ -7,6 +7,7 @@ export type Event = {
   date: string;
   endDate?: string;
   venue?: string;
+  location?: string;
   guestCount: number;
   budget?: number;
   status: EventStatus;

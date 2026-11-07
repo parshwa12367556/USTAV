@@ -7,14 +7,16 @@ export type EventRecord = {
   guests: number;
   budget: number;
   spent: number;
-  status: 'Planning' | 'Confirmed' | 'Completed';
+  status: 'Planning' | 'Confirmed' | 'Completed' | 'Cancelled';
   initials: string;
   accent: string;
 };
 
 export type GuestRecord = {
+  id?: string;
+  invitationToken?: string;
   name: string;
   group: string;
   email: string;
-  status: 'Confirmed' | 'Pending' | 'Declined';
+  status: 'Confirmed' | 'Pending' | 'Declined' | 'Maybe';
 };

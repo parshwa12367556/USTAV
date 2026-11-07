@@ -14,4 +14,18 @@ export const quotationsApi = {
     const response = await apiClient.patch<Quotation>(`/quotations/${encodeURIComponent(id)}`, { status });
     return response.data;
   },
+  async sendVendorReply(
+    id: string,
+    input: {
+      title: string;
+      items: Array<{ description: string; quantity: number; unitPrice: number }>;
+      validUntil?: string;
+    },
+  ): Promise<Quotation> {
+    const response = await apiClient.patch<Quotation>(`/quotations/${encodeURIComponent(id)}`, {
+      ...input,
+      status: 'sent',
+    });
+    return response.data;
+  },
 };

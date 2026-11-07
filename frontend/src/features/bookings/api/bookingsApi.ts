@@ -11,6 +11,13 @@ export const bookingsApi = {
     return response.data;
   },
   async cancel(id: string): Promise<void> {
-    await apiClient.delete(`/bookings/${encodeURIComponent(id)}`);
+    await apiClient.patch(`/bookings/${encodeURIComponent(id)}`, { status: 'cancelled' });
+  },
+  async updateStatus(id: string, status: Booking['status'], note?: string): Promise<Booking> {
+    const response = await apiClient.patch<Booking>(`/bookings/${encodeURIComponent(id)}`, {
+      status,
+      note,
+    });
+    return response.data;
   },
 };

@@ -2,6 +2,28 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import type { EventRecord } from '../types/workspace.types';
 import { initialEvents } from '../data/workspaceData';
+import { eventsApi } from '../features/events/api/eventsApi';
+import type { Event } from '../types/event.types';
+import { useAuth } from '../hooks/useAuth';
+
+function toEventRecord(event: Event): EventRecord {
+  const status = event.status === 'completed' ? 'Completed'
+    : event.status === 'confirmed' ? 'Confirmed'
+      : event.status === 'cancelled' ? 'Cancelled' : 'Planning';
+  return {
+    id: event.id,
+    name: event.name,
+    type: event.type,
+    date: event.date,
+    location: event.location ?? event.venue ?? '',
+    guests: event.guestCount,
+    budget: event.budget ?? 0,
+    spent: 0,
+    status,
+    initials: event.name.split(/\s+/).slice(0, 2).map((part) => part[0] ?? '').join('').toUpperCase(),
+    accent: 'rose',
+  };
+}
 
 type IconName =
   | 'grid'
@@ -176,6 +198,7 @@ const catalogTitles: Record<string, string> = {
 export function WorkspaceLayout() {
   const location = useLocation();
   const navigate = useNavigate();
+  const { user, isAuthenticated } = useAuth();
   const [events, setEvents] = useState<EventRecord[]>(() => {
     try {
       const saved = localStorage.getItem('utsav-events');
@@ -185,6 +208,8 @@ export function WorkspaceLayout() {
       return initialEvents;
     }
   });
+  const [eventsLoading, setEventsLoading] = useState(false);
+  const [eventError, setEventError] = useState('');
   const [modalOpen, setModalOpen] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
@@ -197,6 +222,29 @@ export function WorkspaceLayout() {
     eyebrow: location.pathname.startsWith('/admin/') ? 'THE UTSAV CONTROL ROOM' : location.pathname.startsWith('/vendor/') ? 'YOUR BUSINESS, ALL TOGETHER' : 'PLAN THE MOMENTS THAT MATTER',
   };
   const sidebarNavigation = location.pathname.startsWith('/admin') ? adminNavigation : location.pathname.startsWith('/vendor') ? vendorNavigation : navigation;
+
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    let active = true;
+    setEventsLoading(true);
+    setEventError('');
+    eventsApi.list()
+      .then((result) => {
+        if (active) setEvents(result.map(toEventRecord));
+      })
+      .catch((error: unknown) => {
+        if (active) {
+          setEvents([]);
+          setEventError(error instanceof Error ? error.message : 'Unable to load your events.');
+        }
+      })
+      .finally(() => {
+        if (active) setEventsLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [isAuthenticated, user?.id]);
 
   useEffect(() => {
     const handleShortcut = (event: KeyboardEvent) => {
@@ -215,14 +263,18 @@ export function WorkspaceLayout() {
     return () => window.removeEventListener('keydown', handleShortcut);
   }, []);
 
-  const saveEvent = (event: EventRecord) => {
-    const updated = [event, ...events];
-    setEvents(updated);
-    try {
-      localStorage.setItem('utsav-events', JSON.stringify(updated));
-    } catch (error) {
-      console.error('Unable to save the event in this browser.', error);
-    }
+  const saveEvent = async (event: EventRecord) => {
+    if (!isAuthenticated) throw new Error('Sign in before saving an event to your account.');
+    const saved = await eventsApi.create({
+      name: event.name,
+      type: event.type,
+      date: event.date,
+      location: event.location,
+      guestCount: event.guests,
+      budget: event.budget,
+      status: event.status.toLowerCase() as Event['status'],
+    });
+    setEvents((current) => [toEventRecord(saved), ...current]);
     setModalOpen(false);
     navigate('/events');
   };
@@ -349,7 +401,14 @@ export function WorkspaceLayout() {
             <div><p className="eyebrow">{page.eyebrow}</p><h1>{page.title}</h1></div>
             <button className="button button--primary" onClick={() => setModalOpen(true)}><Icon name="plus" size={17} />Create an event</button>
           </div>
-          <Outlet context={{ events, saveEvent, openCreateEvent: () => setModalOpen(true) }} />
+          <Outlet context={{
+            events,
+            saveEvent,
+            openCreateEvent: () => setModalOpen(true),
+            eventsLoading,
+            eventError,
+            isAuthenticated,
+          }} />
         </main>
       </div>
 
@@ -358,20 +417,24 @@ export function WorkspaceLayout() {
   );
 }
 
-function CreateEventModal({ onClose, onSave }: { onClose: () => void; onSave: (event: EventRecord) => void }) {
+function CreateEventModal({ onClose, onSave }: { onClose: () => void; onSave: (event: EventRecord) => Promise<void> }) {
   const [name, setName] = useState('');
   const [type, setType] = useState('Wedding');
   const [date, setDate] = useState('');
   const [location, setLocation] = useState('');
   const [error, setError] = useState('');
+  const [saving, setSaving] = useState(false);
 
-  const submit = (event: React.FormEvent<HTMLFormElement>) => {
+  const submit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!name.trim() || !date || !location.trim()) {
       setError('Add an event name, date, and location to continue.');
       return;
     }
-    onSave({
+    setSaving(true);
+    setError('');
+    try {
+      await onSave({
       id: `evt-${Date.now()}`,
       name: name.trim(),
       type,
@@ -383,7 +446,12 @@ function CreateEventModal({ onClose, onSave }: { onClose: () => void; onSave: (e
       status: 'Planning',
       initials: name.trim().split(/\s+/).slice(0, 2).map((part) => part[0]).join('').toUpperCase(),
       accent: 'rose',
-    });
+      });
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Unable to save your event. Please try again.');
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -400,7 +468,7 @@ function CreateEventModal({ onClose, onSave }: { onClose: () => void; onSave: (e
           </div>
           <label>Where will it be?<input placeholder="City, venue, or somewhere special" value={location} onChange={(event) => setLocation(event.target.value)} /></label>
           {error && <p className="form-error" role="alert">{error}</p>}
-          <div className="modal-actions"><button type="button" className="button button--quiet" onClick={onClose}>Maybe later</button><button type="submit" className="button button--primary">Create your event <span>→</span></button></div>
+          <div className="modal-actions"><button type="button" className="button button--quiet" onClick={onClose} disabled={saving}>Maybe later</button><button type="submit" className="button button--primary" disabled={saving}>{saving ? 'Saving…' : <>Create your event <span>→</span></>}</button></div>
         </form>
       </section>
     </div>

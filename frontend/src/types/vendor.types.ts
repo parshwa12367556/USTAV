@@ -9,4 +9,5 @@ export type Vendor = {
   description?: string;
   verified: boolean;
   imageUrl?: string;
+  verificationStatus?: 'pending' | 'verified' | 'rejected';
 };

@@ -1,5 +1,5 @@
 import { apiClient } from '../../../services/api/apiClient';
-import type { AuthSession, LoginCredentials, RegisterInput } from '../../../types/auth.types';
+import type { AuthSession, AuthUser, LoginCredentials, RegisterInput } from '../../../types/auth.types';
 
 export const authApi = {
   async login(credentials: LoginCredentials): Promise<AuthSession> {
@@ -12,5 +12,19 @@ export const authApi = {
   async verifyOtp(email: string, code: string): Promise<AuthSession> {
     const response = await apiClient.post<AuthSession>('/auth/verify-otp', { email, code });
     return response.data;
+  },
+  async me(): Promise<AuthUser> {
+    const response = await apiClient.get<{ user: AuthUser }>('/auth/me');
+    return response.data.user;
+  },
+  async requestPasswordReset(email: string): Promise<void> {
+    await apiClient.post('/auth/password-reset/request', { email });
+  },
+  async resetPassword(email: string, code: string, newPassword: string): Promise<void> {
+    await apiClient.post('/auth/password-reset', { email, code, newPassword });
+  },
+  async updateProfile(input: Partial<Pick<AuthUser, 'name' | 'phone'>>): Promise<AuthUser> {
+    const response = await apiClient.patch<{ user: AuthUser }>('/auth/me', input);
+    return response.data.user;
   },
 };
