@@ -1,7 +1,7 @@
 from datetime import date
 
 from flask import Blueprint, request
-from flask_jwt_extended import get_jwt_identity, jwt_required
+from flask_jwt_extended import get_jwt, get_jwt_identity, jwt_required
 from marshmallow import Schema, fields, validate
 
 from app.core.exceptions import ApiError
@@ -33,7 +33,9 @@ expense_schema = ExpenseSchema()
 
 def _owned_event(event_id: str, permission: str) -> Event:
     event = db.session.get(Event, event_id)
-    return require_event_permission(get_jwt_identity(), event, permission)
+    return require_event_permission(
+        get_jwt_identity(), event, permission, get_jwt().get("membership_id")
+    )
 
 
 @budget_bp.get("/events/<event_id>/budget")

@@ -3,10 +3,10 @@ from hashlib import sha256
 import secrets
 
 from flask import Blueprint, request
-from flask_jwt_extended import get_jwt_identity, jwt_required
+from flask_jwt_extended import get_jwt, get_jwt_identity, jwt_required
 
 from app.core.exceptions import ApiError
-from app.core.security import hash_password
+from app.core.security import hash_password, validate_password_strength
 from app.extensions import db
 from app.models.booking import Booking
 from app.models.user import User
@@ -34,6 +34,17 @@ def _owner_vendor() -> VendorProfile:
     user = db.session.get(User, get_jwt_identity())
     if user is None or user.role != "vendor" or user.vendor_profile is None:
         raise ApiError("A vendor owner account is required.", 403)
+    membership_id = get_jwt().get("membership_id")
+    if membership_id:
+        membership = db.session.get(VendorMembership, membership_id)
+        if (
+            membership is None
+            or membership.user_id != user.id
+            or membership.vendor_id != user.vendor_profile.id
+            or membership.role != "owner"
+            or membership.status != "active"
+        ):
+            raise ApiError("The active vendor workspace does not allow this action.", 403)
     return user.vendor_profile
 
 
@@ -59,6 +70,26 @@ def list_vendor_staff():
         .order_by(VendorMembership.created_at)
     ).all()
     return [_staff_dict(member) for member in members]
+
+
+@vendor_staff_bp.get("/profile/me/staff/invitations")
+@jwt_required()
+def list_vendor_staff_invitations():
+    vendor = _owner_vendor()
+    invitations = db.session.scalars(
+        db.select(VendorStaffInvitation)
+        .where(VendorStaffInvitation.vendor_id == vendor.id)
+        .order_by(VendorStaffInvitation.created_at.desc())
+    ).all()
+    return [
+        {
+            "id": invitation.id,
+            "email": invitation.email,
+            "status": invitation.status,
+            "expiresAt": invitation.expires_at.isoformat(),
+        }
+        for invitation in invitations
+    ]
 
 
 @vendor_staff_bp.post("/profile/me/staff/invitations")
@@ -106,6 +137,27 @@ def invite_vendor_staff():
     }, 201
 
 
+@vendor_staff_bp.delete("/profile/me/staff/invitations/<invitation_id>")
+@jwt_required()
+def revoke_vendor_staff_invitation(invitation_id: str):
+    vendor = _owner_vendor()
+    invitation = db.session.get(VendorStaffInvitation, invitation_id)
+    if invitation is None or invitation.vendor_id != vendor.id:
+        raise ApiError("Vendor staff invitation not found.", 404)
+    if invitation.status != "pending":
+        raise ApiError("Vendor staff invitation is no longer pending.", 409)
+    expires_at = invitation.expires_at
+    if expires_at.tzinfo is None:
+        expires_at = expires_at.replace(tzinfo=timezone.utc)
+    if expires_at <= datetime.now(timezone.utc):
+        invitation.status = "expired"
+        db.session.commit()
+        raise ApiError("Vendor staff invitation has expired.", 410)
+    invitation.status = "revoked"
+    db.session.commit()
+    return "", 204
+
+
 @vendor_staff_bp.post("/staff/invitations/accept")
 @jwt_required(optional=True)
 def accept_vendor_staff_invitation():
@@ -133,6 +185,9 @@ def accept_vendor_staff_invitation():
             raise ApiError("Name and password are required to create an invited account.", 400)
         if db.session.scalar(db.select(User.id).where(User.email == invitation.email)):
             raise ApiError("Sign in to accept this invitation for your existing account.", 401)
+        validate_password_strength(
+            payload["password"], name=payload["name"], email=invitation.email
+        )
         user = User(
             name=payload["name"].strip(),
             email=invitation.email,
@@ -170,11 +225,13 @@ def accept_vendor_staff_invitation():
     invitation.status = "accepted"
     db.session.commit()
     from app.services.auth_service import create_session
+    from app.services.session_cookie import session_json_response
 
-    return {
-        "membership": _staff_dict(membership),
-        "session": create_session(user, membership.id, strict_membership=True),
-    }
+    session = create_session(user, membership.id, strict_membership=True)
+    return session_json_response(
+        {"membership": _staff_dict(membership), "session": session},
+        session,
+    )
 
 
 @vendor_staff_bp.delete("/profile/me/staff/<membership_id>")

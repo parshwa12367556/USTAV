@@ -1,7 +1,7 @@
 from datetime import datetime, timezone
 
 from flask import Blueprint, request
-from flask_jwt_extended import get_jwt_identity, jwt_required
+from flask_jwt_extended import get_jwt, get_jwt_identity, jwt_required
 from marshmallow import ValidationError
 
 from app.core.exceptions import ApiError
@@ -22,7 +22,9 @@ def _owned_invitation(invitation_id: str, permission: str = "invitation.view") -
     event = db.session.get(Event, invitation.event_id) if invitation else None
     if invitation is None:
         raise ApiError("Invitation not found.", 404)
-    require_event_permission(get_jwt_identity(), event, permission)
+    require_event_permission(
+        get_jwt_identity(), event, permission, get_jwt().get("membership_id")
+    )
     return invitation
 
 
@@ -66,7 +68,11 @@ def list_invitations():
         .join(Event)
         .where(
             UserInvitation.event_id.in_(
-                accessible_event_ids(get_jwt_identity(), "invitation.view")
+                accessible_event_ids(
+                    get_jwt_identity(),
+                    "invitation.view",
+                    get_jwt().get("membership_id"),
+                )
             )
         )
         .order_by(UserInvitation.created_at.desc())
@@ -79,7 +85,12 @@ def list_invitations():
 def create_invitation():
     payload = invitation_schema.load(request.get_json(silent=True) or {})
     event = db.session.get(Event, payload["eventId"])
-    require_event_permission(get_jwt_identity(), event, "invitation.create")
+    require_event_permission(
+        get_jwt_identity(),
+        event,
+        "invitation.create",
+        get_jwt().get("membership_id"),
+    )
     template = db.session.get(InvitationTemplate, payload["templateId"])
     if template is None or not template.is_published:
         raise ApiError("Invitation template not found.", 404)

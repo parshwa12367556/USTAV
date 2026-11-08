@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { useNavigate, useOutletContext, useParams, useSearchParams } from 'react-router-dom';
 import { isAxiosError } from 'axios';
-import { formatCurrency, formatDate, initialTasks } from '../../data/workspaceData';
+import { formatCurrency, formatDate } from '../../data/workspaceData';
 import { Icon } from '../../layouts/WorkspaceLayout';
 import type { EventRecord, GuestRecord } from '../../types/workspace.types';
 import { usePersistentState } from '../../hooks/usePersistentState';
@@ -28,11 +28,14 @@ import {
   adminApi,
   type AdminAuditLog,
   type AdminDashboard,
+  type AdminSecurityEvent,
   type AdminUser,
   type AdminVendor,
 } from '../../features/admin/api/adminApi';
 import { AdminMonitoringTables } from '../../features/admin/components/AdminMonitoringTables';
 import { AuditLogTable } from '../../features/admin/components/AuditLogTable';
+import { authApi } from '../../features/auth/api/authApi';
+import type { UserSessionInfo } from '../../types/auth.types';
 import { UserManagementTable } from '../../features/admin/components/UserManagementTable';
 import { quotationsApi } from '../../features/quotations/api/quotationsApi';
 import type { Quotation } from '../../types/quotation.types';
@@ -44,10 +47,11 @@ import {
   type VendorPackage,
   type VendorService,
 } from '../../features/vendors/api/vendorManagementApi';
-import { vendorStaffApi, type VendorStaffMember } from '../../features/vendors/api/vendorStaffApi';
+import { vendorStaffApi, type VendorStaffInvitation, type VendorStaffMember } from '../../features/vendors/api/vendorStaffApi';
 import { useAuth } from '../../hooks/useAuth';
 import {
   workspaceApi,
+  type WorkspaceInvitation,
   type WorkspaceMember,
   type WorkspacePermission,
   type WorkspaceMemberRole,
@@ -110,6 +114,16 @@ type WorkspaceContext = {
   isAuthenticated: boolean;
   saveEvent: (event: EventRecord) => Promise<void>;
 };
+
+type PlanningTask = {
+  id: string;
+  title: string;
+  detail: string;
+  due: string;
+  done: boolean;
+};
+
+const emptyTasks: PlanningTask[] = [];
 
 function useWorkspace() {
   return useOutletContext<WorkspaceContext>();
@@ -197,7 +211,7 @@ function StatusPill({ status }: { status: string }) {
   return <span className={`status-pill status-pill--${tone}`}><i />{status}</span>;
 }
 
-function isTaskList(value: unknown): value is typeof initialTasks {
+function isTaskList(value: unknown): value is PlanningTask[] {
   return Array.isArray(value) && value.every((task) =>
     typeof task === 'object' && task !== null &&
     typeof task.id === 'string' &&
@@ -210,15 +224,19 @@ function isTaskList(value: unknown): value is typeof initialTasks {
 
 export function DashboardPage() {
   const { events, openCreateEvent } = useWorkspace();
-  const { user, isAuthenticated } = useAuth();
+  const { user, isAuthenticated, membershipId } = useAuth();
   const navigate = useNavigate();
-  const [tasks, setTasks, taskStorageError] = usePersistentState('utsav-planning-tasks', initialTasks, isTaskList);
+  const taskStorageKey = `utsav-planning-tasks:${user?.id ?? 'anonymous'}:${membershipId ?? 'none'}`;
+  const [tasks, setTasks, taskStorageError] = usePersistentState(taskStorageKey, emptyTasks, isTaskList);
   const [confirmedGuests, setConfirmedGuests] = useState(0);
   const activeEvent = events[0];
   const totalBudget = events.reduce((sum, event) => sum + event.budget, 0);
   const totalSpent = events.reduce((sum, event) => sum + event.spent, 0);
   const completedTasks = tasks.filter((task) => task.done).length;
   const firstName = user?.name?.trim().split(/\s+/).filter(Boolean)[0] ?? 'there';
+  const daysUntilEvent = activeEvent
+    ? Math.max(0, Math.ceil((new Date(`${activeEvent.date}T00:00:00`).getTime() - Date.now()) / 86400000))
+    : null;
 
   useEffect(() => {
     if (!isAuthenticated || !activeEvent) {
@@ -240,7 +258,7 @@ export function DashboardPage() {
     <div className="dashboard-page">
       <section className="welcome-row">
         <div><h2>Good morning, {firstName} <span className="wave">✦</span></h2><p>Big moments are made of little details. You’re doing wonderfully.</p></div>
-        <span className="welcome-note">Your next celebration is in <strong>39 days</strong></span>
+        {daysUntilEvent !== null && <span className="welcome-note">Your next celebration is in <strong>{daysUntilEvent} days</strong></span>}
       </section>
 
       <section className="hero-card">
@@ -250,9 +268,11 @@ export function DashboardPage() {
           <p className="hero-subtitle"><span>{activeEvent?.type ?? 'A special day'}</span><b>·</b><span>{activeEvent ? formatDate(activeEvent.date) : 'Add a date'}</span><b>·</b><span>{activeEvent?.location ?? 'Your favourite place'}</span></p>
           <div className="hero-progress">
             <div className="hero-progress-copy"><span>Planning progress</span><strong>{completedTasks} of {tasks.length} little things done</strong></div>
-            <div className="progress-track"><span style={{ width: `${(completedTasks / tasks.length) * 100}%` }} /></div>
+            <div className="progress-track"><span style={{ width: `${tasks.length ? (completedTasks / tasks.length) * 100 : 0}%` }} /></div>
           </div>
-          <button className="button button--light" onClick={() => document.getElementById('planning-checklist')?.scrollIntoView({ behavior: 'smooth' })}>See your checklist <span>→</span></button>
+          <button className="button button--light" onClick={() => activeEvent ? document.getElementById('planning-checklist')?.scrollIntoView({ behavior: 'smooth' }) : openCreateEvent()}>
+            {activeEvent ? 'See your checklist' : 'Create your first celebration'} <span>→</span>
+          </button>
         </div>
         <div className="hero-art" aria-hidden="true">
           <div className="hero-sun" />
@@ -268,11 +288,11 @@ export function DashboardPage() {
         </article>
         <article className="stat-card">
           <span className="stat-icon stat-icon--sage"><Icon name="users" size={18} /></span><span className="stat-label">GUESTS CONFIRMED</span>
-          <strong className="stat-value">{confirmedGuests}<small> / {activeEvent?.guests || 250}</small></strong><span className="stat-foot"><span className="stat-positive">+12</span> lovely replies this week</span>
+          <strong className="stat-value">{confirmedGuests}<small> / {activeEvent?.guests ?? 0}</small></strong><span className="stat-foot">{activeEvent ? 'Attending for your selected event' : 'No guests to count without an event'}</span>
         </article>
         <article className="stat-card">
           <span className="stat-icon stat-icon--gold"><Icon name="wallet" size={18} /></span><span className="stat-label">BUDGET ALLOCATED</span>
-          <strong className="stat-value stat-value--money">{formatCurrency(totalBudget || 1850000)}</strong><span className="stat-foot">{formatCurrency(totalSpent)} thoughtfully spent so far</span>
+          <strong className="stat-value stat-value--money">{formatCurrency(totalBudget)}</strong><span className="stat-foot">{formatCurrency(totalSpent)} thoughtfully spent so far</span>
         </article>
         <article className="stat-card">
           <span className="stat-icon stat-icon--lavender"><Icon name="sparkle" size={18} /></span><span className="stat-label">ON YOUR CHECKLIST</span>
@@ -285,7 +305,7 @@ export function DashboardPage() {
           <SectionHeading title="Your little to-do list" action="View all" onAction={() => navigate('/events')} />
           <p className="section-description">A few thoughtful steps to bring it all together.</p>
           {taskStorageError && <p className="form-error" role="alert">{taskStorageError}</p>}
-          <div className="checklist">
+          {tasks.length ? <div className="checklist">
             {tasks.map((task) => (
               <button
                 className={`task-row ${task.done ? 'task-row--done' : ''}`}
@@ -297,17 +317,17 @@ export function DashboardPage() {
                 <span className="task-due">{task.due}</span><span className="task-arrow">›</span>
               </button>
             ))}
-          </div>
+          </div> : <p className="section-description">Your checklist is empty. Add a celebration to start planning.</p>}
           <button className="add-task-button" onClick={openCreateEvent}><span>+</span> Add a celebration to plan</button>
         </section>
 
         <section className="content-card budget-card">
           <SectionHeading title="The big picture" action="See budget" onAction={() => navigate('/budget')} />
           <p className="section-description">Your wedding budget, at a glance.</p>
-          <div className="budget-total"><div><span>YOUR TOTAL BUDGET</span><strong>{formatCurrency(activeEvent?.budget ?? 1850000)}</strong></div><span className="budget-total-icon"><Icon name="wallet" size={19} /></span></div>
-          <div className="budget-bar"><span style={{ width: `${Math.min(((activeEvent?.spent ?? 845000) / (activeEvent?.budget || 1850000)) * 100, 100)}%` }} /></div>
-          <div className="budget-legend"><span><i className="legend-dot legend-dot--rose" />Spent <strong>{formatCurrency(activeEvent?.spent ?? 845000)}</strong></span><span><i className="legend-dot legend-dot--pale" />Left <strong>{formatCurrency(Math.max((activeEvent?.budget ?? 1850000) - (activeEvent?.spent ?? 845000), 0))}</strong></span></div>
-          <div className="budget-insight"><span className="insight-icon">✦</span><p>You’re right on track. The average wedding spends <strong>46% by this stage</strong> of planning.</p></div>
+          <div className="budget-total"><div><span>YOUR TOTAL BUDGET</span><strong>{formatCurrency(totalBudget)}</strong></div><span className="budget-total-icon"><Icon name="wallet" size={19} /></span></div>
+          <div className="budget-bar"><span style={{ width: `${totalBudget ? Math.min((totalSpent / totalBudget) * 100, 100) : 0}%` }} /></div>
+          <div className="budget-legend"><span><i className="legend-dot legend-dot--rose" />Spent <strong>{formatCurrency(totalSpent)}</strong></span><span><i className="legend-dot legend-dot--pale" />Left <strong>{formatCurrency(Math.max(totalBudget - totalSpent, 0))}</strong></span></div>
+          <div className="budget-insight"><span className="insight-icon">✦</span><p>{activeEvent ? 'Your budget summary reflects events in this workspace.' : 'Add an event to see its budget summary here.'}</p></div>
         </section>
       </div>
 
@@ -321,6 +341,7 @@ export function DashboardPage() {
               <StatusPill status={event.status} /><Icon name="arrow" size={15} />
             </article>
           ))}
+          {!events.length && <p className="section-description">No events yet. Create a celebration to see it here.</p>}
           <button className="event-preview event-preview--add" onClick={openCreateEvent}><span className="add-event-mark"><Icon name="plus" /></span><span className="event-preview-copy"><strong>Another reason to celebrate?</strong><span>Add an event to your family calendar</span></span><span className="add-link">Add one <b>→</b></span></button>
         </div>
       </section>
@@ -1316,6 +1337,7 @@ export function MembersPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const invitationToken = searchParams.get('token') ?? '';
   const [members, setMembers] = useState<WorkspaceMember[]>([]);
+  const [invitations, setInvitations] = useState<WorkspaceInvitation[]>([]);
   const [email, setEmail] = useState('');
   const [role, setRole] = useState<Exclude<WorkspaceMemberRole, 'owner'>>('member');
   const [permissions, setPermissions] = useState<WorkspacePermission[]>(['event.view', 'guest.view']);
@@ -1323,6 +1345,7 @@ export function MembersPage() {
   const [editRole, setEditRole] = useState<Exclude<WorkspaceMemberRole, 'owner'>>('member');
   const [editPermissions, setEditPermissions] = useState<WorkspacePermission[]>([]);
   const [inviteToken, setInviteToken] = useState('');
+  const [inviteId, setInviteId] = useState('');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -1334,8 +1357,13 @@ export function MembersPage() {
       return;
     }
     let active = true;
-    workspaceApi.listMembers()
-      .then((result) => { if (active) setMembers(result); })
+    Promise.all([workspaceApi.listMembers(), workspaceApi.listInvitations()])
+      .then(([result, invitationItems]) => {
+        if (active) {
+          setMembers(result);
+          setInvitations(invitationItems);
+        }
+      })
       .catch((cause: unknown) => { if (active) setError(cause instanceof Error ? cause.message : 'Unable to load workspace members.'); })
       .finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
@@ -1356,7 +1384,9 @@ export function MembersPage() {
     setNotice('');
     try {
       const invitation = await workspaceApi.invite({ email: email.trim(), role, permissions });
+      setInvitations((current) => [invitation, ...current]);
       setInviteToken(invitation.acceptanceToken);
+      setInviteId(invitation.id);
       setNotice(`Invitation created for ${invitation.email}. Share the secure link below; it expires in seven days.`);
       setEmail('');
     } catch (cause) {
@@ -1376,7 +1406,7 @@ export function MembersPage() {
       setSearchParams({});
       navigate((result.session.memberships?.length ?? 0) > 1
         ? '/choose-workspace'
-        : result.session.activeRole === 'wedding_planner' ? '/planner' : '/dashboard', { replace: true });
+        : result.session.activeRole === 'wedding_planner' ? '/planner/dashboard' : '/family/dashboard', { replace: true });
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Unable to accept this invitation.');
     } finally {
@@ -1409,6 +1439,27 @@ export function MembersPage() {
       setNotice(`${member.name} was removed from this workspace.`);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Unable to remove this member.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const revokeInvitation = async (invitation: WorkspaceInvitation) => {
+    if (!window.confirm(`Revoke the invitation for ${invitation.email}?`)) return;
+    setSaving(true);
+    setError('');
+    try {
+      await workspaceApi.revokeInvitation(invitation.id);
+      setInvitations((current) => current.map((item) =>
+        item.id === invitation.id ? { ...item, status: 'revoked' } : item,
+      ));
+      if (inviteId === invitation.id) {
+        setInviteToken('');
+        setInviteId('');
+      }
+      setNotice(`The invitation for ${invitation.email} was revoked.`);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Unable to revoke this invitation.');
     } finally {
       setSaving(false);
     }
@@ -1450,6 +1501,7 @@ export function MembersPage() {
       </section>
       <section className="content-card workspace-members-card">
         <div className="list-toolbar"><div><SectionHeading title="Invite someone to help" /><p className="section-description">Invitations are email-bound, expire after seven days, and grant only the permissions you select.</p></div></div>
+        {invitations.length > 0 && <div className="workspace-member-list">{invitations.map((invitation) => <article className="workspace-member-row" key={invitation.id}><div className="request-copy"><strong>{invitation.email}</strong><span>{invitation.role === 'planner' ? 'Wedding planner' : 'Family member'} invitation · {invitation.status}</span><small>Expires {formatDate(invitation.expiresAt)}</small></div>{invitation.status === 'pending' && <button className="button button--quiet" disabled={saving} onClick={() => void revokeInvitation(invitation)}>Revoke</button>}</article>)}</div>}
         <form className="event-form workspace-invite-form" onSubmit={(event) => void inviteMember(event)}>
           <label>Email address<input type="email" required value={email} onChange={(event) => setEmail(event.target.value)} placeholder="relative@example.com" /></label>
           <label>Role<select value={role} onChange={(event) => setRole(event.target.value as Exclude<WorkspaceMemberRole, 'owner'>)}><option value="member">Family member</option><option value="planner">Wedding planner</option></select></label>
@@ -1463,12 +1515,32 @@ export function MembersPage() {
 }
 
 export function SettingsPage() {
-  const { user, updateProfile, isAuthenticated } = useAuth();
+  const { user, updateProfile, isAuthenticated, signOut } = useAuth();
+  const navigate = useNavigate();
   const [saved, setSaved] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [name, setName] = useState(user?.name ?? '');
   const [phone, setPhone] = useState(user?.phone ?? '');
+  const [sessions, setSessions] = useState<UserSessionInfo[]>([]);
+  const [sessionError, setSessionError] = useState('');
+  const [sessionBusy, setSessionBusy] = useState('');
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [passwordError, setPasswordError] = useState('');
+  const [passwordBusy, setPasswordBusy] = useState(false);
+  const refreshSessions = async () => {
+    try {
+      setSessions(await authApi.listSessions());
+      setSessionError('');
+    } catch (cause) {
+      setSessionError(cause instanceof Error ? cause.message : 'Unable to load your active sessions.');
+    }
+  };
+  useEffect(() => {
+    if (isAuthenticated) void refreshSessions();
+  }, [isAuthenticated]);
   useEffect(() => {
     setName(user?.name ?? '');
     setPhone(user?.phone ?? '');
@@ -1491,10 +1563,97 @@ export function SettingsPage() {
       setSaving(false);
     }
   };
+  const revokeSession = async (session: UserSessionInfo) => {
+    setSessionBusy(session.id);
+    setSessionError('');
+    try {
+      await authApi.revokeSession(session.id);
+      if (session.current) {
+        await signOut();
+      } else {
+        await refreshSessions();
+      }
+    } catch (cause) {
+      setSessionError(cause instanceof Error ? cause.message : 'Unable to revoke this session.');
+    } finally {
+      setSessionBusy('');
+    }
+  };
+  const revokeOthers = async () => {
+    setSessionBusy('others');
+    setSessionError('');
+    try {
+      await authApi.revokeOtherSessions();
+      await refreshSessions();
+    } catch (cause) {
+      setSessionError(cause instanceof Error ? cause.message : 'Unable to revoke other sessions.');
+    } finally {
+      setSessionBusy('');
+    }
+  };
+  const changePassword = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setPasswordError('');
+    if (newPassword !== confirmPassword) {
+      setPasswordError('The new passwords do not match.');
+      return;
+    }
+    setPasswordBusy(true);
+    try {
+      await authApi.changePassword(currentPassword, newPassword);
+      setCurrentPassword('');
+      setNewPassword('');
+      setConfirmPassword('');
+      window.dispatchEvent(new Event('utsav:session-expired'));
+      navigate('/login', {
+        replace: true,
+        state: { notice: 'Password updated. Please sign in again.' },
+      });
+    } catch (cause) {
+      setPasswordError(cause instanceof Error ? cause.message : 'Unable to change your password.');
+    } finally {
+      setPasswordBusy(false);
+    }
+  };
   return (
     <div className="screen-stack settings-screen">
       <section className="settings-profile"><span className="settings-avatar">{(user?.name ?? 'U').split(/\s+/).slice(0, 2).map((part) => part[0] ?? '').join('').toUpperCase()}</span><div><h2>{user?.name ?? 'Your profile'}</h2><p>{user?.role ?? 'Guest'} · {user?.email ?? 'Sign in to manage your profile'}</p></div></section>
       <form className="content-card settings-card" onSubmit={save}><div className="section-heading"><div><h2>Your details</h2><p className="section-description">Update the profile details connected to your account.</p></div></div><div className="settings-form"><label>Your name<input required minLength={2} value={name} onChange={(event) => setName(event.currentTarget.value)} /></label><label>Email address<input value={user?.email ?? ''} type="email" readOnly /></label><label>Phone number<div className="phone-input"><span>Phone</span><input value={phone} onChange={(event) => setPhone(event.currentTarget.value)} /></div></label></div>{error && <p className="form-error" role="alert">{error}</p>}<div className="settings-actions"><span>{saved ? 'Your profile details have been saved.' : 'Your information is only shared with people you choose.'}</span><button type="submit" className="button button--primary" disabled={saving || !isAuthenticated}>{saving ? 'Saving…' : saved ? 'Saved ✓' : 'Save your changes'}</button></div></form>
+      <section className="content-card settings-card">
+        <div className="section-heading">
+          <div><h2>Active sessions</h2><p className="section-description">Review devices signed in to your account and remove any you do not recognize.</p></div>
+          <button type="button" className="button button--quiet" onClick={() => void revokeOthers()} disabled={sessionBusy !== '' || !sessions.some((session) => !session.current)}>
+            {sessionBusy === 'others' ? 'Revoking…' : 'Sign out other devices'}
+          </button>
+        </div>
+        {sessionError && <p className="form-error" role="alert">{sessionError}</p>}
+        <div className="settings-form">
+          {sessions.map((session) => (
+            <div className="settings-actions" key={session.id}>
+              <span>
+                <strong>{session.deviceName}</strong>{session.current ? ' · This device' : ''}
+                <small> · Last active {new Date(session.lastActivityAt).toLocaleString()}</small>
+              </span>
+              {!session.current && (
+                <button type="button" className="button button--quiet" disabled={sessionBusy !== ''} onClick={() => void revokeSession(session)}>
+                  {sessionBusy === session.id ? 'Revoking…' : 'Revoke'}
+                </button>
+              )}
+            </div>
+          ))}
+          {!sessions.length && isAuthenticated && <p>No active sessions were found.</p>}
+        </div>
+      </section>
+      <form className="content-card settings-card" onSubmit={(event) => void changePassword(event)}>
+        <div className="section-heading"><div><h2>Change password</h2><p className="section-description">Choose at least 12 characters with letters and numbers.</p></div></div>
+        <div className="settings-form">
+          <label>Current password<input type="password" autoComplete="current-password" minLength={8} required value={currentPassword} onChange={(event) => setCurrentPassword(event.target.value)} /></label>
+          <label>New password<input type="password" autoComplete="new-password" minLength={12} required value={newPassword} onChange={(event) => setNewPassword(event.target.value)} /></label>
+          <label>Confirm new password<input type="password" autoComplete="new-password" minLength={12} required value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} /></label>
+        </div>
+        {passwordError && <p className="form-error" role="alert">{passwordError}</p>}
+        <div className="settings-actions"><span>Changing your password signs out all active devices.</span><button type="submit" className="button button--primary" disabled={passwordBusy || !isAuthenticated}>{passwordBusy ? 'Updating…' : 'Update password'}</button></div>
+      </form>
       <section className="content-card preferences-card"><div><h3>A little note from Utsav</h3><p>Get kind reminders, RSVP updates, and planning inspiration in your inbox.</p></div><label className="switch"><input type="checkbox" defaultChecked /><span /></label></section>
     </div>
   );
@@ -1505,6 +1664,7 @@ export function AdminPage() {
   const [vendors, setVendors] = useState<AdminVendor[]>([]);
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [auditLogs, setAuditLogs] = useState<AdminAuditLog[]>([]);
+  const [securityEvents, setSecurityEvents] = useState<AdminSecurityEvent[]>([]);
   const [dashboard, setDashboard] = useState<AdminDashboard | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -1521,13 +1681,15 @@ export function AdminPage() {
       adminApi.listUsers(),
       adminApi.listVendors(),
       adminApi.listAuditLogs(),
+      adminApi.listSecurityEvents(),
       adminApi.getDashboard(),
     ])
-      .then(([userItems, vendorItems, auditItems, dashboardData]) => {
+      .then(([userItems, vendorItems, auditItems, securityEventItems, dashboardData]) => {
         if (active) {
           setUsers(userItems);
           setVendors(vendorItems);
           setAuditLogs(auditItems);
+          setSecurityEvents(securityEventItems);
           setDashboard(dashboardData);
         }
       })
@@ -1567,6 +1729,7 @@ export function AdminPage() {
         adminApi.getDashboard(),
       ]);
       setAuditLogs(auditItems);
+      setSecurityEvents(await adminApi.listSecurityEvents());
       setDashboard(dashboardData);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Unable to update account status.');
@@ -1602,6 +1765,23 @@ export function AdminPage() {
       <section className="content-card admin-review-card">
         <div className="list-toolbar"><div><SectionHeading title="Recent administrator activity" /><p className="section-description">The latest 200 account and platform actions.</p></div></div>
         {loading ? <p role="status">Loading audit history…</p> : <AuditLogTable entries={auditLogs} />}
+      </section>
+      <section className="content-card admin-review-card">
+        <div className="list-toolbar"><div><SectionHeading title="Recent security events" /><p className="section-description">Authentication, session, password, MFA, and rate-limit events. Limited to the latest 200.</p></div></div>
+        {loading ? <p role="status">Loading security events…</p> : securityEvents.length ? (
+          <div className="admin-vendor-list">
+            {securityEvents.map((event) => (
+              <article className="admin-vendor-row" key={event.id}>
+                <span className="admin-vendor-name">
+                  <strong>{event.eventType.replaceAll('.', ' ')}</strong>
+                  <small>{event.userId ?? 'Unknown account'} · {event.ipAddress ?? 'Unknown IP'}</small>
+                </span>
+                <span className="admin-submitted">{event.result}</span>
+                <small>{new Date(event.createdAt).toLocaleString()}</small>
+              </article>
+            ))}
+          </div>
+        ) : <p>No security events are recorded yet.</p>}
       </section>
       <div className="tip-banner"><span>✦</span><p><strong>Your marketplace, your standards.</strong> Clear, kind reviews help build a safer and more welcoming community for everyone.</p></div>
     </div>
@@ -1669,7 +1849,7 @@ export function VendorDashboardPage() {
   };
   return (
     <div className="screen-stack">
-      <section className="vendor-welcome"><div><span className="eyebrow">YOUR LITTLE CORNER OF UTSAV</span><h2>Welcome, {profile?.name ?? user?.name ?? 'vendor'} <span>✦</span></h2><p>{isStaff ? 'Here are the bookings assigned to you.' : profile ? 'Here are the real enquiries and bookings connected to your profile.' : 'Set up your profile to start managing your services.'}</p></div><div className="vendor-welcome-actions">{profile && <button className="button button--outline" onClick={() => navigate('/vendor/settings')}>Manage your profile</button>}{isStaff && <button className="button button--outline" onClick={() => navigate('/vendor/staff')}>Assigned bookings</button>}</div></section>
+      <section className="vendor-welcome"><div><span className="eyebrow">YOUR LITTLE CORNER OF UTSAV</span><h2>Welcome, {profile?.name ?? user?.name ?? 'vendor'} <span>✦</span></h2><p>{isStaff ? 'Here are the bookings assigned to you.' : profile ? 'Here are the real enquiries and bookings connected to your profile.' : 'Set up your profile to start managing your services.'}</p></div><div className="vendor-welcome-actions">{profile && <button className="button button--outline" onClick={() => navigate('/vendor/settings')}>Manage your profile</button>}{isStaff && <button className="button button--outline" onClick={() => navigate('/vendor/bookings')}>Assigned bookings</button>}</div></section>
       {error && <p className="form-error" role="alert">{error}</p>}
       {!isAuthenticated || !isVendorAccount ? <p className="form-error" role="alert">Sign in with a vendor account to view your studio dashboard.</p> : loading && <p role="status">Loading your studio activity…</p>}
       {isStaff
@@ -1725,6 +1905,7 @@ export function VendorStaffPage() {
   const [searchParams] = useSearchParams();
   const token = searchParams.get('token') ?? '';
   const [staff, setStaff] = useState<VendorStaffMember[]>([]);
+  const [invitations, setInvitations] = useState<VendorStaffInvitation[]>([]);
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [email, setEmail] = useState('');
   const [inviteToken, setInviteToken] = useState('');
@@ -1737,7 +1918,14 @@ export function VendorStaffPage() {
   const refresh = async () => {
     const vendorBookings = await bookingsApi.list();
     setBookings(vendorBookings);
-    if (!isStaff) setStaff(await vendorStaffApi.list());
+    if (!isStaff) {
+      const [members, invitationItems] = await Promise.all([
+        vendorStaffApi.list(),
+        vendorStaffApi.listInvitations(),
+      ]);
+      setStaff(members);
+      setInvitations(invitationItems);
+    }
   };
 
   useEffect(() => {
@@ -1750,10 +1938,15 @@ export function VendorStaffPage() {
       ? bookingsApi.list().then((vendorBookings) => {
         if (active) setBookings(vendorBookings);
       })
-      : Promise.all([vendorStaffApi.list(), bookingsApi.list()]).then(([members, vendorBookings]) => {
+      : Promise.all([
+        vendorStaffApi.list(),
+        bookingsApi.list(),
+        vendorStaffApi.listInvitations(),
+      ]).then(([members, vendorBookings, invitationItems]) => {
         if (active) {
           setStaff(members);
           setBookings(vendorBookings);
+          setInvitations(invitationItems);
         }
       });
     load
@@ -1771,7 +1964,7 @@ export function VendorStaffPage() {
     try {
       const result = await vendorStaffApi.accept(token);
       setSession(result.session);
-      navigate((result.session.memberships?.length ?? 0) > 1 ? '/choose-workspace' : '/vendor');
+      navigate((result.session.memberships?.length ?? 0) > 1 ? '/choose-workspace' : '/vendor/dashboard');
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Unable to accept this vendor staff invitation.');
     } finally {
@@ -1786,6 +1979,10 @@ export function VendorStaffPage() {
     setNotice('');
     try {
       const invitation = await vendorStaffApi.invite(email.trim());
+      setInvitations((current) => [
+        { id: invitation.id, email: invitation.email, status: 'pending', expiresAt: invitation.expiresAt },
+        ...current,
+      ]);
       setInviteToken(invitation.acceptanceToken);
       setEmail('');
       setNotice(`Invitation created for ${invitation.email}. Share this link with the invited vendor account.`);
@@ -1841,6 +2038,24 @@ export function VendorStaffPage() {
     }
   };
 
+  const revokeInvitation = async (invitation: VendorStaffInvitation) => {
+    if (!window.confirm(`Revoke the invitation for ${invitation.email}?`)) return;
+    setSaving(true);
+    setError('');
+    try {
+      await vendorStaffApi.revokeInvitation(invitation.id);
+      setInvitations((current) => current.map((item) =>
+        item.id === invitation.id ? { ...item, status: 'revoked' } : item,
+      ));
+      setInviteToken('');
+      setNotice(`The invitation for ${invitation.email} was revoked.`);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Unable to revoke this invitation.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const inviteUrl = inviteToken
     ? `${window.location.origin}/vendor/invitation?token=${encodeURIComponent(inviteToken)}`
     : '';
@@ -1869,6 +2084,7 @@ export function VendorStaffPage() {
         </section>
         <section className="content-card vendor-requests-card">
           <div className="list-toolbar"><div><SectionHeading title="Invite vendor staff" /><p className="section-description">The invite is tied to one email, expires in seven days, and cannot access pricing or financial settings.</p></div></div>
+          {invitations.length > 0 && <div className="workspace-member-list">{invitations.map((invitation) => <article className="workspace-member-row" key={invitation.id}><div className="request-copy"><strong>{invitation.email}</strong><span>Vendor staff invitation · {invitation.status}</span><small>Expires {formatDate(invitation.expiresAt)}</small></div>{invitation.status === 'pending' && <button className="button button--quiet" disabled={saving} onClick={() => void revokeInvitation(invitation)}>Revoke</button>}</article>)}</div>}
           <form className="event-form workspace-invite-form" onSubmit={(event) => void inviteStaff(event)}><label>Staff email<input type="email" required value={email} onChange={(event) => setEmail(event.target.value)} placeholder="teammate@example.com" /></label><div className="modal-actions"><button className="button button--primary" type="submit" disabled={saving}>{saving ? 'Creating invitation…' : 'Create invitation'} <span>→</span></button></div></form>
           {inviteUrl && <div className="workspace-invite-link"><label>One-time invitation link<input readOnly value={inviteUrl} onFocus={(event) => event.currentTarget.select()} /></label><button className="button button--outline" onClick={() => void navigator.clipboard.writeText(inviteUrl).then(() => setNotice('Invitation link copied.')).catch(() => setError('Could not copy the invitation link; select and copy it manually.'))}>Copy link</button></div>}
         </section>

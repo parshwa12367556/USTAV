@@ -2,7 +2,7 @@ from datetime import datetime, timedelta, timezone
 from secrets import token_urlsafe
 
 from flask import Blueprint, current_app, request
-from flask_jwt_extended import get_jwt_identity, jwt_required
+from flask_jwt_extended import get_jwt, get_jwt_identity, jwt_required
 from marshmallow import Schema, ValidationError, fields, validate
 from werkzeug.datastructures import FileStorage
 
@@ -32,7 +32,9 @@ guest_functions_schema = GuestFunctionsSchema()
 
 def _owned_event(event_id: str, permission: str = "guest.view") -> Event:
     event = db.session.get(Event, event_id)
-    return require_event_permission(get_jwt_identity(), event, permission)
+    return require_event_permission(
+        get_jwt_identity(), event, permission, get_jwt().get("membership_id")
+    )
 
 
 @guest_bp.get("/events/<event_id>/guests")
@@ -120,7 +122,9 @@ def update_guest_group(group_id: str):
     group = db.session.get(GuestGroup, group_id)
     if group is None:
         raise ApiError("Guest group not found.", 404)
-    require_event_permission(get_jwt_identity(), group.event, "guest.update")
+    require_event_permission(
+        get_jwt_identity(), group.event, "guest.update", get_jwt().get("membership_id")
+    )
     payload = guest_group_schema.load(request.get_json(silent=True) or {})
     name = payload["name"].strip()
     duplicate = db.session.scalar(
@@ -143,7 +147,9 @@ def delete_guest_group(group_id: str):
     group = db.session.get(GuestGroup, group_id)
     if group is None:
         raise ApiError("Guest group not found.", 404)
-    require_event_permission(get_jwt_identity(), group.event, "guest.delete")
+    require_event_permission(
+        get_jwt_identity(), group.event, "guest.delete", get_jwt().get("membership_id")
+    )
     db.session.execute(
         db.update(Guest)
         .where(Guest.group_id == group.id)
@@ -188,7 +194,9 @@ def update_guest(guest_id: str):
     guest = db.session.get(Guest, guest_id)
     if guest is None:
         raise ApiError("Guest not found.", 404)
-    require_event_permission(get_jwt_identity(), guest.event, "guest.update")
+    require_event_permission(
+        get_jwt_identity(), guest.event, "guest.update", get_jwt().get("membership_id")
+    )
     payload = guest_schema.load(request.get_json(silent=True) or {}, partial=True)
     for key, value in payload.items():
         if key == "group":
@@ -217,7 +225,9 @@ def list_guest_functions(guest_id: str):
     guest = db.session.get(Guest, guest_id)
     if guest is None:
         raise ApiError("Guest not found.", 404)
-    require_event_permission(get_jwt_identity(), guest.event, "guest.view")
+    require_event_permission(
+        get_jwt_identity(), guest.event, "guest.view", get_jwt().get("membership_id")
+    )
     function_ids = [mapping.function_id for mapping in guest.function_mappings]
     if not function_ids:
         function_ids = [function.id for function in guest.event.functions]
@@ -230,7 +240,9 @@ def update_guest_functions(guest_id: str):
     guest = db.session.get(Guest, guest_id)
     if guest is None:
         raise ApiError("Guest not found.", 404)
-    require_event_permission(get_jwt_identity(), guest.event, "guest.update")
+    require_event_permission(
+        get_jwt_identity(), guest.event, "guest.update", get_jwt().get("membership_id")
+    )
     function_ids = guest_functions_schema.load(request.get_json(silent=True) or {})["functionIds"]
     if len(function_ids) != len(set(function_ids)):
         raise ValidationError({"functionIds": ["A function can only be selected once."]})
@@ -261,7 +273,9 @@ def delete_guest(guest_id: str):
     guest = db.session.get(Guest, guest_id)
     if guest is None:
         raise ApiError("Guest not found.", 404)
-    require_event_permission(get_jwt_identity(), guest.event, "guest.delete")
+    require_event_permission(
+        get_jwt_identity(), guest.event, "guest.delete", get_jwt().get("membership_id")
+    )
     db.session.delete(guest)
     db.session.commit()
     return "", 204
@@ -273,7 +287,9 @@ def rotate_guest_invitation_token(guest_id: str):
     guest = db.session.get(Guest, guest_id)
     if guest is None:
         raise ApiError("Guest not found.", 404)
-    require_event_permission(get_jwt_identity(), guest.event, "guest.update")
+    require_event_permission(
+        get_jwt_identity(), guest.event, "guest.update", get_jwt().get("membership_id")
+    )
     guest.invitation_token = token_urlsafe(24)
     guest.invitation_expires_at = datetime.now(timezone.utc) + timedelta(
         days=current_app.config["INVITATION_TOKEN_EXPIRY_DAYS"]

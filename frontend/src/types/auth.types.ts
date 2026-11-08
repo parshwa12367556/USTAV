@@ -37,7 +37,7 @@ export type AuthUser = {
 
 export type AuthSession = {
   accessToken: string;
-  refreshToken?: string;
+  recoveryCodes?: string[];
   user: AuthUser;
   activeRole?: string;
   activeWorkspace?: AuthWorkspace | null;
@@ -47,6 +47,26 @@ export type AuthSession = {
   memberships?: AuthMembership[];
   accountStatus?: string;
 };
+
+export type UserSessionInfo = {
+  id: string;
+  deviceName: string;
+  deviceType: string;
+  browser: string;
+  operatingSystem: string;
+  ipAddress: string | null;
+  lastActivityAt: string;
+  expiresAt: string;
+  current: boolean;
+};
+
+export type AdminMfaChallenge = {
+  mfaRequired: true;
+  mfaSetupRequired: boolean;
+  challengeToken: string;
+};
+
+export type AuthResult = AuthSession | AdminMfaChallenge;
 
 export type LoginCredentials = {
   email: string;

@@ -1,21 +1,44 @@
-const ACCESS_TOKEN_KEY = 'utsav.access-token';
-const REFRESH_TOKEN_KEY = 'utsav.refresh-token';
+let accessToken: string | null = null;
+let csrfToken: string | null = null;
+const legacyTokenKeys = ['utsav.access-token', 'utsav.refresh-token'];
+
+if (typeof window !== 'undefined') {
+  try {
+    legacyTokenKeys.forEach((key) => window.localStorage.removeItem(key));
+  } catch (error) {
+    console.error('Unable to remove legacy browser authentication tokens.', error);
+  }
+}
 
 export const tokenStorage = {
   get(): string | null {
-    return typeof window === 'undefined' ? null : window.localStorage.getItem(ACCESS_TOKEN_KEY);
+    return accessToken;
   },
-  getRefresh(): string | null {
-    return typeof window === 'undefined' ? null : window.localStorage.getItem(REFRESH_TOKEN_KEY);
-  },
-  set(token: string, refreshToken?: string): void {
-    if (typeof window === 'undefined') return;
-    window.localStorage.setItem(ACCESS_TOKEN_KEY, token);
-    if (refreshToken) window.localStorage.setItem(REFRESH_TOKEN_KEY, refreshToken);
+  set(token: string): void {
+    accessToken = token;
   },
   clear(): void {
-    if (typeof window === 'undefined') return;
-    window.localStorage.removeItem(ACCESS_TOKEN_KEY);
-    window.localStorage.removeItem(REFRESH_TOKEN_KEY);
+    accessToken = null;
+    csrfToken = null;
+    if (typeof window !== 'undefined') {
+      try {
+        legacyTokenKeys.forEach((key) => window.localStorage.removeItem(key));
+      } catch (error) {
+        console.error('Unable to remove legacy browser authentication tokens.', error);
+      }
+    }
   },
 };
+
+export function getCsrfToken(): string | null {
+  if (csrfToken) return csrfToken;
+  if (typeof document === 'undefined') return null;
+  const prefix = 'utsav_csrf=';
+  const cookie = document.cookie.split('; ').find((value) => value.startsWith(prefix));
+  csrfToken = cookie ? decodeURIComponent(cookie.slice(prefix.length)) : null;
+  return csrfToken;
+}
+
+export function setCsrfToken(token: string): void {
+  csrfToken = token;
+}

@@ -15,6 +15,7 @@ import { venuesApi } from '../../features/venues/api/venuesApi';
 import type { Quotation } from '../../types/quotation.types';
 import { useAuth } from '../../hooks/useAuth';
 import { usePersistentState } from '../../hooks/usePersistentState';
+import { tokenStorage } from '../../services/storage/tokenStorage';
 
 type CatalogItem = {
   name: string;
@@ -975,7 +976,13 @@ function AuthPage({ spec }: { spec: PageSpec }) {
     const email = String(values.get('email') ?? searchParams.get('email') ?? '').trim();
     try {
       if (spec.path === '/login') {
-        const session = await authApi.login({ email, password: String(values.get('password') ?? '') });
+        const result = await authApi.login({ email, password: String(values.get('password') ?? '') });
+        if ('mfaRequired' in result) {
+          tokenStorage.set(result.challengeToken);
+          navigate('/admin/2fa', { replace: true, state: { setupRequired: result.mfaSetupRequired } });
+          return;
+        }
+        const session = result;
         setSession(session);
         if ((session.memberships?.length ?? 0) > 1) {
           navigate('/choose-workspace', { replace: true });
@@ -1037,7 +1044,13 @@ function AuthPage({ spec }: { spec: PageSpec }) {
           setError('Return to registration and provide the email address used for your account.');
           return;
         }
-        const session = await authApi.verifyOtp(email, String(values.get('code') ?? ''));
+        const result = await authApi.verifyOtp(email, String(values.get('code') ?? ''));
+        if ('mfaRequired' in result) {
+          tokenStorage.set(result.challengeToken);
+          navigate('/admin/2fa', { replace: true, state: { setupRequired: result.mfaSetupRequired } });
+          return;
+        }
+        const session = result;
         setSession(session);
         navigate((session.memberships?.length ?? 0) > 1 ? '/choose-workspace' : '/', { replace: true });
         return;
@@ -1113,8 +1126,8 @@ function AuthPage({ spec }: { spec: PageSpec }) {
                     required={field.required}
                     type={field.type}
                     autoComplete={field.name.includes('Password') || field.name === 'password' ? 'new-password' : field.name === 'email' ? 'email' : undefined}
-                    placeholder={field.type === 'password' ? 'At least 8 characters' : `Enter ${field.label.toLowerCase()}`}
-                    minLength={field.type === 'password' ? 8 : undefined}
+                    placeholder={field.type === 'password' ? 'At least 12 characters' : `Enter ${field.label.toLowerCase()}`}
+                    minLength={field.type === 'password' ? 12 : undefined}
                     min={field.type === 'number' ? 0 : undefined}
                     max={field.type === 'number' ? 80 : undefined}
                   />
@@ -1128,7 +1141,8 @@ function AuthPage({ spec }: { spec: PageSpec }) {
                     : normalized.includes('name') ? 'name'
                       : normalized.includes('phone') ? 'phone'
                         : normalized.includes('code') ? 'code' : 'value';
-              return <label key={field}>{field}<input name={name} required type={fieldLabel(field)} autoComplete={name === 'password' ? 'current-password' : name === 'email' ? 'email' : undefined} placeholder={normalized.includes('password') ? 'At least 8 characters' : normalized.includes('email') ? 'you@example.com' : `Enter ${normalized}`} minLength={normalized.includes('password') ? 8 : undefined} /></label>;
+              const passwordMinLength = spec.path === '/login' ? 8 : 12;
+              return <label key={field}>{field}<input name={name} required type={fieldLabel(field)} autoComplete={name === 'password' ? 'current-password' : name === 'email' ? 'email' : undefined} placeholder={normalized.includes('password') ? `At least ${passwordMinLength} characters` : normalized.includes('email') ? 'you@example.com' : `Enter ${normalized}`} minLength={normalized.includes('password') ? passwordMinLength : undefined} /></label>;
             })}
             {error && <p className="form-error" role="alert">{error}</p>}
             {notice && <p role="status">{notice}</p>}

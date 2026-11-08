@@ -12,8 +12,11 @@ def roles_required(*roles: str):
         def wrapped(*args: Any, **kwargs: Any):
             verify_jwt_in_request()
             role = get_jwt().get("role")
+            claims = get_jwt()
             if role not in roles and role != "admin":
                 raise ApiError("You do not have permission to perform this action.", 403)
+            if role == "admin" and not claims.get("mfa_verified"):
+                raise ApiError("Administrator two-factor authentication is required.", 403)
             return function(*args, **kwargs)
 
         return wrapped

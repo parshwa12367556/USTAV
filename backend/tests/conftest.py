@@ -15,8 +15,9 @@ def app():
         {
             "SQLALCHEMY_DATABASE_URI": "sqlite://",
             "SQLALCHEMY_ENGINE_OPTIONS": {},
-            "OTP_DELIVERY_MODE": "console",
+            "OTP_DELIVERY_MODE": "disabled",
             "DEBUG": True,
+            "TOTP_ENCRYPTION_KEY": "MDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDA=",
         },
     )
     with application.app_context():

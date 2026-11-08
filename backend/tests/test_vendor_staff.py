@@ -1,3 +1,4 @@
+from datetime import datetime, timedelta, timezone
 from datetime import date
 from decimal import Decimal
 
@@ -84,6 +85,9 @@ def test_vendor_staff_invitation_assignment_and_booking_scope(client, app):
         headers=staff_headers,
     )
     assert accepted.status_code == 200
+    staff_session_headers = {
+        "Authorization": f"Bearer {accepted.json['session']['accessToken']}"
+    }
     membership_id = accepted.json["membership"]["id"]
     assigned = client.post(
         f"/api/v1/vendors/profile/me/bookings/{booking_id}/assignments",
@@ -94,6 +98,8 @@ def test_vendor_staff_invitation_assignment_and_booking_scope(client, app):
 
     staff_bookings = client.get("/api/v1/bookings", headers=staff_headers)
     assert [item["id"] for item in staff_bookings.json] == [booking_id]
+    staff_dashboard = client.get("/api/v1/dashboard", headers=staff_session_headers)
+    assert [item["id"] for item in staff_dashboard.json["recentBookings"]] == [booking_id]
     assert client.get("/api/v1/vendors/profile/me/staff", headers=staff_headers).status_code == 403
     completed = client.patch(
         f"/api/v1/bookings/{booking_id}",
@@ -108,6 +114,21 @@ def test_vendor_staff_invitation_assignment_and_booking_scope(client, app):
         headers=staff_headers,
     )
     assert denied.status_code == 403
+    with app.app_context():
+        from app.models.vendor_staff import VendorMembershipPermission
+
+        view_permission = db.session.scalar(
+            db.select(VendorMembershipPermission).where(
+                VendorMembershipPermission.membership_id == membership_id,
+                VendorMembershipPermission.permission == "booking.view",
+            )
+        )
+        db.session.delete(view_permission)
+        db.session.commit()
+    staff_dashboard = client.get("/api/v1/dashboard", headers=staff_session_headers)
+    assert staff_dashboard.status_code == 200
+    assert staff_dashboard.json["recentBookings"] == []
+    assert staff_dashboard.json["metrics"]["confirmedBookings"] == 0
 
     removed = client.delete(
         f"/api/v1/vendors/profile/me/staff/{membership_id}",
@@ -187,6 +208,12 @@ def test_vendor_staff_invitation_creates_new_account(client, app):
     )
     assert accepted.status_code == 200
     assert accepted.json["session"]["activeRole"] == "vendor_staff"
+    staff_headers = {
+        "Authorization": f"Bearer {accepted.json['session']['accessToken']}"
+    }
+    staff_dashboard = client.get("/api/v1/dashboard", headers=staff_headers)
+    assert staff_dashboard.status_code == 200
+    assert staff_dashboard.json["role"] == "vendor"
     assert client.post(
         "/api/v1/vendors/profile",
         json={
@@ -201,3 +228,89 @@ def test_vendor_staff_invitation_creates_new_account(client, app):
         json={"email": "new-staff@vendor.test", "password": "staff-password-123"},
     )
     assert login.status_code == 200
+
+
+def test_vendor_invitation_expiration_revocation_and_private_service_isolation(
+    client, app
+):
+    from app.models.vendor import VendorProfile
+    from app.models.vendor_staff import VendorStaffInvitation
+
+    owner_a_id, owner_a_token = create_vendor_user(
+        app, "Vendor A", "vendor-a@example.test"
+    )
+    owner_b_id, owner_b_token = create_vendor_user(
+        app, "Vendor B", "vendor-b@example.test"
+    )
+    with app.app_context():
+        profile_a = VendorProfile(
+            user_id=owner_a_id,
+            business_name="Vendor A Studio",
+            category="Catering",
+            city="Jaipur",
+        )
+        profile_b = VendorProfile(
+            user_id=owner_b_id,
+            business_name="Vendor B Studio",
+            category="Photography",
+            city="Udaipur",
+        )
+        db.session.add_all([profile_a, profile_b])
+        db.session.commit()
+
+    owner_a_headers = {"Authorization": f"Bearer {owner_a_token}"}
+    owner_b_headers = {"Authorization": f"Bearer {owner_b_token}"}
+    service_a = client.post(
+        "/api/v1/vendors/profile/me/services",
+        json={"name": "Private A service", "price": 1000},
+        headers=owner_a_headers,
+    )
+    service_b = client.post(
+        "/api/v1/vendors/profile/me/services",
+        json={"name": "Private B service", "price": 2000},
+        headers=owner_b_headers,
+    )
+    assert service_a.status_code == service_b.status_code == 201
+    assert client.patch(
+        f"/api/v1/vendors/services/{service_b.json['id']}",
+        json={"name": "Unauthorized edit"},
+        headers=owner_a_headers,
+    ).status_code == 404
+    assert client.get(
+        "/api/v1/vendors/profile/me/services", headers=owner_a_headers
+    ).json[0]["id"] == service_a.json["id"]
+    assert client.get(
+        "/api/v1/vendors/profile/me/services", headers=owner_b_headers
+    ).json[0]["id"] == service_b.json["id"]
+
+    revoked = client.post(
+        "/api/v1/vendors/profile/me/staff/invitations",
+        json={"email": "revoked-staff@example.test"},
+        headers=owner_a_headers,
+    )
+    assert revoked.status_code == 201
+    assert client.delete(
+        f"/api/v1/vendors/profile/me/staff/invitations/{revoked.json['id']}",
+        headers=owner_a_headers,
+    ).status_code == 204
+    assert client.post(
+        "/api/v1/vendors/staff/invitations/accept",
+        json={"token": revoked.json["acceptanceToken"]},
+    ).status_code == 404
+
+    expired = client.post(
+        "/api/v1/vendors/profile/me/staff/invitations",
+        json={"email": "expired-staff@example.test"},
+        headers=owner_a_headers,
+    )
+    with app.app_context():
+        invitation = db.session.get(VendorStaffInvitation, expired.json["id"])
+        invitation.expires_at = datetime.now(timezone.utc) - timedelta(minutes=1)
+        db.session.commit()
+    response = client.post(
+        "/api/v1/vendors/staff/invitations/accept",
+        json={"token": expired.json["acceptanceToken"]},
+    )
+    assert response.status_code == 410
+    with app.app_context():
+        assert db.session.get(VendorStaffInvitation, expired.json["id"]).status == "expired"

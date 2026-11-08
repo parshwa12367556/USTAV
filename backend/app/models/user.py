@@ -16,6 +16,14 @@ class User(BaseModel):
     otp_expires_at = db.Column(db.DateTime(timezone=True), nullable=True)
     password_reset_hash = db.Column(db.String(255), nullable=True)
     password_reset_expires_at = db.Column(db.DateTime(timezone=True), nullable=True)
+    password_reset_attempts = db.Column(db.Integer, nullable=False, default=0)
+    password_reset_last_sent_at = db.Column(db.DateTime(timezone=True), nullable=True)
+    otp_attempts = db.Column(db.Integer, nullable=False, default=0)
+    otp_last_sent_at = db.Column(db.DateTime(timezone=True), nullable=True)
+    security_version = db.Column(db.Integer, nullable=False, default=0)
+    totp_secret_encrypted = db.Column(db.Text, nullable=True)
+    totp_enabled = db.Column(db.Boolean, nullable=False, default=False)
+    recovery_codes_hashes = db.Column(db.JSON, nullable=False, default=list)
 
     events = db.relationship("Event", back_populates="owner", cascade="all, delete-orphan")
     vendor_profile = db.relationship(

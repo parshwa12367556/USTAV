@@ -24,7 +24,23 @@ booking_status_schema = BookingStatusSchema()
 @jwt_required()
 def list_bookings():
     user_id = get_jwt_identity()
-    profile = db.session.scalar(db.select(VendorProfile).where(VendorProfile.user_id == user_id))
+    membership_id = get_jwt().get("membership_id")
+    active_vendor_membership = (
+        db.session.get(VendorMembership, membership_id) if membership_id else None
+    )
+    if membership_id is None:
+        profile = db.session.scalar(
+            db.select(VendorProfile).where(VendorProfile.user_id == user_id)
+        )
+    elif (
+        active_vendor_membership is not None
+        and active_vendor_membership.user_id == user_id
+        and active_vendor_membership.status == "active"
+        and active_vendor_membership.role == "owner"
+    ):
+        profile = db.session.get(VendorProfile, active_vendor_membership.vendor_id)
+    else:
+        profile = None
     result: dict[str, Booking] = {}
     if profile:
         vendor_bookings = db.session.scalars(
@@ -34,7 +50,7 @@ def list_bookings():
         ).all()
         result.update((booking.id, booking) for booking in vendor_bookings)
 
-    assigned_bookings = db.session.scalars(
+    assigned_query = (
         db.select(Booking)
         .join(VendorBookingAssignment, VendorBookingAssignment.booking_id == Booking.id)
         .join(VendorMembership, VendorMembership.id == VendorBookingAssignment.membership_id)
@@ -47,12 +63,28 @@ def list_bookings():
             VendorMembership.status == "active",
             VendorMembershipPermission.permission == "booking.view",
         )
-    ).all()
+    )
+    if membership_id:
+        if (
+            active_vendor_membership is None
+            or active_vendor_membership.user_id != user_id
+            or active_vendor_membership.status != "active"
+        ):
+            assigned_query = assigned_query.where(db.false())
+        else:
+            assigned_query = assigned_query.where(
+                VendorMembership.id == active_vendor_membership.id
+            )
+    assigned_bookings = db.session.scalars(assigned_query).all()
     result.update((booking.id, booking) for booking in assigned_bookings)
 
     family_bookings = db.session.scalars(
         db.select(Booking)
-        .where(Booking.event_id.in_(accessible_event_ids(user_id, "booking.view")))
+        .where(
+            Booking.event_id.in_(
+                accessible_event_ids(user_id, "booking.view", membership_id)
+            )
+        )
         .order_by(Booking.created_at.desc())
     ).all()
     result.update((booking.id, booking) for booking in family_bookings)
@@ -69,7 +101,9 @@ def create_booking():
     payload = booking_schema.load(request.get_json(silent=True) or {})
     event = db.session.get(Event, payload["eventId"])
     vendor = db.session.get(VendorProfile, payload["vendorId"])
-    require_event_permission(get_jwt_identity(), event, "booking.create")
+    require_event_permission(
+        get_jwt_identity(), event, "booking.create", get_jwt().get("membership_id")
+    )
     if vendor is None or vendor.verification_status != "verified":
         raise ApiError("Verified vendor not found.", 404)
 
@@ -96,12 +130,28 @@ def update_booking(booking_id: str):
     role = get_jwt().get("role")
     user_id = get_jwt_identity()
     event = db.session.get(Event, booking.event_id)
-    owns_event = user_has_event_permission(user_id, event, "booking.update")
-    vendor_id = db.session.scalar(
-        db.select(VendorProfile.id).where(VendorProfile.user_id == user_id)
+    owns_event = user_has_event_permission(
+        user_id, event, "booking.update", get_jwt().get("membership_id")
     )
+    membership_id = get_jwt().get("membership_id")
+    active_vendor_membership = (
+        db.session.get(VendorMembership, membership_id) if membership_id else None
+    )
+    if membership_id is None:
+        vendor_id = db.session.scalar(
+            db.select(VendorProfile.id).where(VendorProfile.user_id == user_id)
+        )
+    elif (
+        active_vendor_membership is not None
+        and active_vendor_membership.user_id == user_id
+        and active_vendor_membership.status == "active"
+        and active_vendor_membership.role == "owner"
+    ):
+        vendor_id = active_vendor_membership.vendor_id
+    else:
+        vendor_id = None
     owns_vendor = booking.vendor_id == vendor_id
-    staff_membership = db.session.scalar(
+    staff_query = (
         db.select(VendorMembership)
         .join(
             VendorBookingAssignment,
@@ -118,6 +168,19 @@ def update_booking(booking_id: str):
             VendorBookingAssignment.booking_id == booking.id,
         )
     )
+    if membership_id:
+        if (
+            active_vendor_membership is None
+            or active_vendor_membership.user_id != user_id
+            or active_vendor_membership.status != "active"
+            or active_vendor_membership.role == "owner"
+        ):
+            staff_query = staff_query.where(db.false())
+        else:
+            staff_query = staff_query.where(
+                VendorMembership.id == active_vendor_membership.id
+            )
+    staff_membership = db.session.scalar(staff_query)
     if not owns_event and not owns_vendor and staff_membership is None and role != "admin":
         raise ApiError("Booking not found.", 404)
 

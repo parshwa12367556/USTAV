@@ -1,5 +1,3 @@
-from sqlalchemy import and_, or_
-
 from app.core.exceptions import ApiError
 from app.extensions import db
 from app.models.event import Event
@@ -72,25 +70,30 @@ def ensure_family_workspace(user: User) -> FamilyWorkspace:
     return workspace
 
 
-def user_has_event_permission(user_id: str, event: Event | None, permission: str) -> bool:
+def user_has_event_permission(
+    user_id: str,
+    event: Event | None,
+    permission: str,
+    membership_id: str | None = None,
+) -> bool:
     if event is None:
         return False
-    if event.owner_id == user_id:
-        return True
     workspace = db.session.scalar(
         db.select(FamilyWorkspace).where(FamilyWorkspace.owner_user_id == event.owner_id)
     )
-    if workspace is None:
+    if membership_id is None:
+        return event.owner_id == user_id
+    membership = db.session.get(FamilyMembership, membership_id)
+    if (
+        membership is None
+        or membership.user_id != user_id
+        or membership.status != "active"
+        or workspace is None
+        or membership.workspace_id != workspace.id
+    ):
         return False
-    membership = db.session.scalar(
-        db.select(FamilyMembership).where(
-            FamilyMembership.workspace_id == workspace.id,
-            FamilyMembership.user_id == user_id,
-            FamilyMembership.status == "active",
-        )
-    )
-    if membership is None or membership.role == "owner":
-        return membership is not None
+    if membership.role == "owner":
+        return True
     return db.session.scalar(
         db.select(FamilyMembershipPermission.id).where(
             FamilyMembershipPermission.membership_id == membership.id,
@@ -99,34 +102,40 @@ def user_has_event_permission(user_id: str, event: Event | None, permission: str
     ) is not None
 
 
-def accessible_event_ids(user_id: str, permission: str):
-    return (
-        db.select(Event.id)
-        .outerjoin(FamilyWorkspace, FamilyWorkspace.owner_user_id == Event.owner_id)
-        .outerjoin(
-            FamilyMembership,
-            FamilyMembership.workspace_id == FamilyWorkspace.id,
-        )
-        .outerjoin(
+def accessible_event_ids(
+    user_id: str,
+    permission: str,
+    membership_id: str | None = None,
+):
+    if membership_id is None:
+        return db.select(Event.id).where(Event.owner_id == user_id)
+    membership = db.session.get(FamilyMembership, membership_id)
+    if (
+        membership is None
+        or membership.user_id != user_id
+        or membership.status != "active"
+    ):
+        return db.select(Event.id).where(db.false())
+    workspace = db.session.get(FamilyWorkspace, membership.workspace_id)
+    if workspace is None:
+        return db.select(Event.id).where(db.false())
+    query = db.select(Event.id).where(Event.owner_id == workspace.owner_user_id)
+    if membership.role != "owner":
+        query = query.join(
             FamilyMembershipPermission,
-            FamilyMembershipPermission.membership_id == FamilyMembership.id,
-        )
-        .where(
-            or_(
-                Event.owner_id == user_id,
-                and_(
-                    FamilyMembership.user_id == user_id,
-                    FamilyMembership.status == "active",
-                    FamilyMembershipPermission.permission == permission,
-                ),
-            )
-        )
-        .distinct()
-    )
+            FamilyMembershipPermission.membership_id == membership.id,
+        ).where(FamilyMembershipPermission.permission == permission)
+    return query
 
 
-def require_event_permission(user_id: str, event: Event | None, permission: str) -> Event:
-    if event is None or not user_has_event_permission(user_id, event, permission):
+def require_event_permission(
+    user_id: str,
+    event: Event | None,
+    permission: str,
+    membership_id: str | None = None,
+) -> Event:
+    if event is None or not user_has_event_permission(
+        user_id, event, permission, membership_id
+    ):
         raise ApiError("Event not found.", 404)
     return event
-from sqlalchemy import and_, or_

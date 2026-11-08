@@ -27,7 +27,11 @@ function clearPrivateBrowserData() {
   try {
     const privateKeys = ['utsav-events', 'utsav-planning-tasks'];
     for (const key of Object.keys(window.localStorage)) {
-      if (privateKeys.includes(key) || key.startsWith('utsav-catalog:')) {
+      if (
+        privateKeys.includes(key) ||
+        key.startsWith('utsav-planning-tasks:') ||
+        key.startsWith('utsav-catalog:')
+      ) {
         window.localStorage.removeItem(key);
       }
     }
@@ -53,7 +57,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
   const [membershipId, setMembershipId] = useState<string | null>(null);
   const [memberships, setMemberships] = useState<AuthMembership[]>([]);
   const [accountStatus, setAccountStatus] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(() => Boolean(tokenStorage.get()));
+  const [isLoading, setIsLoading] = useState(true);
 
   const clearSessionState = useCallback(() => {
     queryClient.clear();
@@ -76,7 +80,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
   const signOut = useCallback(async () => {
     let logoutError: unknown;
     try {
-      if (tokenStorage.get()) await authApi.logout(tokenStorage.getRefresh());
+      if (tokenStorage.get()) await authApi.logout();
     } catch (error) {
       logoutError = error;
     } finally {
@@ -86,10 +90,6 @@ export function AuthProvider({ children }: PropsWithChildren) {
   }, [clearSessionState]);
 
   useEffect(() => {
-    if (!tokenStorage.get()) {
-      setIsLoading(false);
-      return;
-    }
     let active = true;
     authApi.me()
       .then((profile) => {
@@ -126,7 +126,9 @@ export function AuthProvider({ children }: PropsWithChildren) {
   }, [clearSessionState]);
 
   const setSession = useCallback((session: AuthSession) => {
-    tokenStorage.set(session.accessToken, session.refreshToken);
+    queryClient.clear();
+    clearPrivateBrowserData();
+    tokenStorage.set(session.accessToken);
     setUser(session.user);
     setActiveRole(session.activeRole ?? session.user.role ?? null);
     setActiveWorkspace(session.activeWorkspace ?? null);

@@ -6,6 +6,7 @@ from app.extensions import db
 from app.models.event import Event
 from app.models.quotation import QuotationLineItem, QuotationRequest
 from app.models.vendor import VendorProfile
+from app.models.vendor_staff import VendorMembership
 from app.schemas.quotation_schema import (
     QuotationCreateSchema,
     QuotationStatusSchema,
@@ -29,16 +30,34 @@ vendor_reply_schema = QuotationVendorReplySchema()
 def list_quotations():
     role = get_jwt().get("role")
     if role == "vendor":
-        vendor_id = db.session.scalar(
-            db.select(VendorProfile.id).where(VendorProfile.user_id == get_jwt_identity())
-        )
+        membership_id = get_jwt().get("membership_id")
+        membership = db.session.get(VendorMembership, membership_id) if membership_id else None
+        if membership_id:
+            vendor_id = (
+                membership.vendor_id
+                if membership is not None
+                and membership.user_id == get_jwt_identity()
+                and membership.status == "active"
+                and membership.role == "owner"
+                else None
+            )
+        else:
+            vendor_id = db.session.scalar(
+                db.select(VendorProfile.id).where(
+                    VendorProfile.user_id == get_jwt_identity()
+                )
+            )
         if vendor_id is None:
             return []
         query = db.select(QuotationRequest).where(QuotationRequest.vendor_id == vendor_id)
     else:
         query = db.select(QuotationRequest).where(
             QuotationRequest.event_id.in_(
-                accessible_event_ids(get_jwt_identity(), "quotation.view")
+                accessible_event_ids(
+                    get_jwt_identity(),
+                    "quotation.view",
+                    get_jwt().get("membership_id"),
+                )
             )
         )
     event_id = request.args.get("eventId")
@@ -53,7 +72,9 @@ def list_quotations():
 def create_quotation_request():
     payload = create_schema.load(request.get_json(silent=True) or {})
     event = db.session.get(Event, payload["eventId"])
-    require_event_permission(get_jwt_identity(), event, "quotation.create")
+    require_event_permission(
+        get_jwt_identity(), event, "quotation.create", get_jwt().get("membership_id")
+    )
     vendor = db.session.get(VendorProfile, payload["vendorId"])
     if vendor is None or vendor.verification_status != "verified":
         raise ApiError("Verified vendor not found.", 404)
@@ -70,9 +91,30 @@ def update_quotation_status(quotation_id: str):
     if quotation is None or event is None:
         raise ApiError("Quotation not found.", 404)
     user_id = get_jwt_identity()
-    is_event_owner = user_has_event_permission(user_id, event, "quotation.update")
+    is_event_owner = user_has_event_permission(
+        user_id, event, "quotation.update", get_jwt().get("membership_id")
+    )
     vendor = db.session.get(VendorProfile, quotation.vendor_id)
-    is_vendor_owner = vendor is not None and vendor.user_id == user_id
+    active_membership_id = get_jwt().get("membership_id")
+    active_vendor_membership = (
+        db.session.get(VendorMembership, active_membership_id)
+        if active_membership_id
+        else None
+    )
+    is_vendor_owner = (
+        vendor is not None
+        and vendor.user_id == user_id
+        and (
+            active_membership_id is None
+            or (
+                active_vendor_membership is not None
+                and active_vendor_membership.user_id == user_id
+                and active_vendor_membership.vendor_id == vendor.id
+                and active_vendor_membership.role == "owner"
+                and active_vendor_membership.status == "active"
+            )
+        )
+    )
     if not is_event_owner and not is_vendor_owner:
         raise ApiError("Quotation not found.", 404)
     if is_vendor_owner:

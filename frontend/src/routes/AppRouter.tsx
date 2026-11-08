@@ -1,8 +1,9 @@
 import { lazy, Suspense } from 'react';
-import { BrowserRouter, Navigate, Outlet, Route, Routes } from 'react-router-dom';
+import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { WorkspaceLayout } from '../layouts/WorkspaceLayout';
 import { useAuth } from '../hooks/useAuth';
 import { AuthGuard } from './guards/AuthGuard';
+import { PermissionGuard } from './guards/PermissionGuard';
 import { RoleGuard } from './guards/RoleGuard';
 
 const CatalogWorkspacePage = lazy(() =>
@@ -28,6 +29,7 @@ const VendorsPage = lazy(() => import('../pages/workspace/WorkspacePages').then(
 const LandingPage = lazy(() => import('../pages/public/LandingPage'));
 const LegalPage = lazy(() => import('../pages/public/LegalPage'));
 const MembershipPickerPage = lazy(() => import('../pages/auth/MembershipPickerPage').then((module) => ({ default: module.MembershipPickerPage })));
+const AdminMfaPage = lazy(() => import('../pages/auth/AdminMfaPage').then((module) => ({ default: module.AdminMfaPage })));
 const InvitationAcceptancePage = lazy(() => import('../pages/auth/InvitationAcceptancePage').then((module) => ({ default: module.InvitationAcceptancePage })));
 
 export function AppRouter() {
@@ -52,6 +54,7 @@ export function AppRouter() {
         <Route path="/explore/venues" element={<PublicPageRoute />} />
         <Route path="/explore/invitations" element={<PublicPageRoute />} />
         <Route path="/login" element={<LoginRoute />} />
+        <Route path="/admin/2fa" element={<AdminMfaPage />} />
         <Route path="/register" element={<PublicPageRoute />} />
         <Route path="/verify-otp" element={<PublicPageRoute />} />
         <Route path="/forgot-password" element={<PublicPageRoute />} />
@@ -60,47 +63,78 @@ export function AppRouter() {
         <Route path="/choose-workspace" element={<AuthGuard><MembershipPickerPage /></AuthGuard>} />
         <Route element={<AuthGuard><WorkspaceLayout /></AuthGuard>}>
           <Route path="settings" element={<SettingsPage />} />
-          <Route element={<RoleGuard roles={['family']}><Outlet /></RoleGuard>}>
-            <Route path="dashboard" element={<DashboardPage />} />
-            <Route path="planner" element={<DashboardPage />} />
-            <Route path="events" element={<EventsPage />} />
-            <Route path="events/:eventId/functions" element={<EventFunctionsPage />} />
-            <Route path="guests" element={<GuestsPage />} />
-            <Route path="invitations" element={<InvitationsPage />} />
-            <Route path="vendors" element={<VendorsPage />} />
-            <Route path="venues" element={<VendorsPage category="venues" />} />
-            <Route path="budget" element={<BudgetPage />} />
-            <Route path="bookings" element={<BookingsPage />} />
-            <Route path="events/create" element={<CatalogWorkspacePage />} />
-            <Route path="events/:eventId" element={<CatalogWorkspacePage />} />
-            <Route path="functions/:functionId" element={<EventFunctionsPage />} />
-            <Route path="guest-groups" element={<GuestGroupsPage />} />
-            <Route path="invitation-editor" element={<CatalogWorkspacePage />} />
-            <Route path="rsvp" element={<CatalogWorkspacePage />} />
-            <Route path="catering" element={<CatalogWorkspacePage />} />
-            <Route path="decoration" element={<CatalogWorkspacePage />} />
-            <Route path="event-management" element={<CatalogWorkspacePage />} />
-            <Route path="other-services" element={<CatalogWorkspacePage />} />
-            <Route path="quotations" element={<CatalogWorkspacePage />} />
-            <Route path="quotations/:quoteId" element={<CatalogWorkspacePage />} />
-            <Route path="payments" element={<CatalogWorkspacePage />} />
-            <Route path="payments/:paymentId" element={<CatalogWorkspacePage />} />
-            <Route path="bookings/:bookingId" element={<CatalogWorkspacePage />} />
-            <Route path="members" element={<MembersPage />} />
-            <Route path="notifications" element={<CatalogWorkspacePage />} />
-            <Route path="family-settings" element={<CatalogWorkspacePage />} />
-          </Route>
-          <Route element={<RoleGuard roles={['admin']}><Outlet /></RoleGuard>}>
+            <Route element={<RoleGuard roles={['wedding_planner']} />}>
+              <Route element={<PermissionGuard permissions={['planner.view']} />}>
+              <Route path="planner" element={<DashboardPage />} />
+              <Route path="planner/dashboard" element={<DashboardPage />} />
+              </Route>
+            </Route>
+            <Route element={<RoleGuard roles={['family', 'wedding_planner']} />}>
+              <Route element={<PermissionGuard permissions={['event.view']} />}>
+                <Route path="dashboard" element={<DashboardPage />} />
+                <Route path="family/dashboard" element={<DashboardPage />} />
+                <Route path="events" element={<EventsPage />} />
+                <Route path="events/:eventId/functions" element={<EventFunctionsPage />} />
+                <Route path="events/:eventId" element={<CatalogWorkspacePage />} />
+                <Route path="functions/:functionId" element={<EventFunctionsPage />} />
+              </Route>
+              <Route element={<PermissionGuard permissions={['event.create']} />}>
+                <Route path="events/create" element={<CatalogWorkspacePage />} />
+              </Route>
+              <Route element={<PermissionGuard permissions={['guest.view']} />}>
+                <Route path="guests" element={<GuestsPage />} />
+                <Route path="guest-groups" element={<GuestGroupsPage />} />
+                <Route path="rsvp" element={<CatalogWorkspacePage />} />
+              </Route>
+              <Route element={<PermissionGuard permissions={['invitation.view']} />}>
+                <Route path="invitations" element={<InvitationsPage />} />
+              </Route>
+              <Route element={<PermissionGuard permissions={['invitation.create']} />}>
+                <Route path="invitation-editor" element={<CatalogWorkspacePage />} />
+              </Route>
+              <Route element={<PermissionGuard permissions={['budget.view']} />}>
+                <Route path="budget" element={<BudgetPage />} />
+              </Route>
+              <Route element={<PermissionGuard permissions={['booking.view']} />}>
+                <Route path="bookings" element={<BookingsPage />} />
+                <Route path="bookings/:bookingId" element={<CatalogWorkspacePage />} />
+              </Route>
+              <Route element={<PermissionGuard permissions={['quotation.view']} />}>
+                <Route path="quotations" element={<CatalogWorkspacePage />} />
+                <Route path="quotations/:quoteId" element={<CatalogWorkspacePage />} />
+              </Route>
+              <Route element={<PermissionGuard permissions={['payment.view']} />}>
+                <Route path="payments" element={<CatalogWorkspacePage />} />
+                <Route path="payments/:paymentId" element={<CatalogWorkspacePage />} />
+              </Route>
+              <Route element={<RoleGuard roles={['family_owner']} />}>
+                <Route path="members" element={<MembersPage />} />
+                <Route path="family-settings" element={<CatalogWorkspacePage />} />
+              </Route>
+              <Route element={<RoleGuard roles={['family']} />}>
+                <Route path="vendors" element={<VendorsPage />} />
+                <Route path="venues" element={<VendorsPage category="venues" />} />
+                <Route path="catering" element={<CatalogWorkspacePage />} />
+                <Route path="decoration" element={<CatalogWorkspacePage />} />
+                <Route path="event-management" element={<CatalogWorkspacePage />} />
+                <Route path="other-services" element={<CatalogWorkspacePage />} />
+                <Route path="notifications" element={<CatalogWorkspacePage />} />
+              </Route>
+            </Route>
+          <Route element={<RoleGuard roles={['admin']} />}>
             <Route path="admin" element={<AdminPage />} />
+            <Route path="admin/dashboard" element={<AdminPage />} />
             <Route path="admin/categories" element={<AdminPlatformPage />} />
             <Route path="admin/commissions" element={<AdminPlatformPage />} />
             <Route path="admin/reports" element={<AdminPlatformPage />} />
             <Route path="admin/:section" element={<CatalogWorkspacePage />} />
           </Route>
-          <Route element={<RoleGuard roles={['vendor']}><Outlet /></RoleGuard>}>
+          <Route element={<RoleGuard roles={['vendor']} />}>
             <Route path="vendor" element={<VendorDashboardPage />} />
-            <Route path="vendor/staff" element={<VendorStaffPage />} />
-            <Route element={<RoleGuard roles={['vendor_owner']}><Outlet /></RoleGuard>}>
+            <Route path="vendor/dashboard" element={<VendorDashboardPage />} />
+            <Route path="vendor/bookings" element={<VendorDashboardPage />} />
+            <Route element={<RoleGuard roles={['vendor_owner']} />}>
+              <Route path="vendor/staff" element={<VendorStaffPage />} />
               <Route path="vendor/profile" element={<VendorManagementPage />} />
               <Route path="vendor/services" element={<VendorManagementPage />} />
               <Route path="vendor/packages" element={<VendorManagementPage />} />
@@ -127,9 +161,9 @@ function HomePageRoute() {
     return <div className="page-loading" role="status">Checking your session…</div>;
   }
   if (isAuthenticated) {
-    const destination = activeRole === 'admin' || activeRole === 'super_admin' ? '/admin'
-      : activeRole === 'vendor' || activeRole === 'vendor_owner' || activeRole === 'vendor_staff' ? '/vendor'
-        : activeRole === 'wedding_planner' ? '/planner' : '/dashboard';
+    const destination = activeRole === 'admin' || activeRole === 'super_admin' ? '/admin/dashboard'
+      : activeRole === 'vendor' || activeRole === 'vendor_owner' || activeRole === 'vendor_staff' ? '/vendor/dashboard'
+        : activeRole === 'wedding_planner' ? '/planner/dashboard' : '/family/dashboard';
     return <Navigate to={destination} replace />;
   }
   return <LandingPage />;
@@ -145,10 +179,10 @@ function LoginRoute() {
   }
 
   if (activeRole === 'admin' || activeRole === 'super_admin') {
-    return <Navigate to="/admin" replace />;
+    return <Navigate to="/admin/dashboard" replace />;
   }
   if (activeRole === 'vendor' || activeRole === 'vendor_owner' || activeRole === 'vendor_staff') {
-    return <Navigate to="/vendor" replace />;
+    return <Navigate to="/vendor/dashboard" replace />;
   }
-  return <Navigate to={activeRole === 'wedding_planner' ? '/planner' : '/dashboard'} replace />;
+  return <Navigate to={activeRole === 'wedding_planner' ? '/planner/dashboard' : '/family/dashboard'} replace />;
 }

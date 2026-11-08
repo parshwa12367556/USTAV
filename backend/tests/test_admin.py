@@ -1,6 +1,6 @@
 from datetime import date, datetime, timezone
 
-from flask_jwt_extended import create_access_token
+from flask_jwt_extended import create_access_token as _create_access_token
 from werkzeug.security import generate_password_hash
 
 from app.extensions import db
@@ -9,6 +9,20 @@ from app.models.event import Event
 from app.models.payment import Payment
 from app.models.user import User
 from app.models.vendor import VendorProfile
+
+
+def create_access_token(identity, additional_claims=None, **kwargs):
+    claims = dict(additional_claims or {})
+    user = db.session.get(User, identity)
+    if user is not None and user.role == "admin":
+        user.totp_enabled = True
+        db.session.commit()
+        claims["mfa_verified"] = True
+    return _create_access_token(
+        identity=identity,
+        additional_claims=claims,
+        **kwargs,
+    )
 
 
 def test_admin_can_review_vendor_and_non_admin_cannot(client, app):
@@ -167,6 +181,35 @@ def test_admin_cannot_suspend_own_account(client, app):
     )
     assert response.status_code == 409
     assert response.json["message"] == "You cannot suspend your own administrator account."
+
+
+def test_security_events_are_available_only_to_mfa_admin(client, app):
+    with app.app_context():
+        admin = User(
+            name="Events Admin",
+            email="events-admin@example.com",
+            password_hash=generate_password_hash("admin-password-123"),
+            role="admin",
+            is_verified=True,
+        )
+        member = User(
+            name="Events Member",
+            email="events-member@example.com",
+            password_hash=generate_password_hash("member-password-123"),
+            role="family",
+            is_verified=True,
+        )
+        db.session.add_all([admin, member])
+        db.session.commit()
+        admin_headers = {
+            "Authorization": f"Bearer {create_access_token(identity=admin.id, additional_claims={'role': 'admin'})}"
+        }
+        member_headers = {
+            "Authorization": f"Bearer {create_access_token(identity=member.id, additional_claims={'role': 'family'})}"
+        }
+
+    assert client.get("/api/v1/admin/security-events", headers=admin_headers).status_code == 200
+    assert client.get("/api/v1/admin/security-events", headers=member_headers).status_code == 403
 
 
 def test_admin_dashboard_reports_metrics_and_recent_activity(client, app):

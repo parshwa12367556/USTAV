@@ -10,9 +10,22 @@ export type VendorStaffMember = {
   status: string;
 };
 
+export type VendorStaffInvitation = {
+  id: string;
+  email: string;
+  status: string;
+  expiresAt: string;
+};
+
 export const vendorStaffApi = {
   async list(): Promise<VendorStaffMember[]> {
     const response = await apiClient.get<VendorStaffMember[]>('/vendors/profile/me/staff');
+    return response.data;
+  },
+  async listInvitations(): Promise<VendorStaffInvitation[]> {
+    const response = await apiClient.get<VendorStaffInvitation[]>(
+      '/vendors/profile/me/staff/invitations',
+    );
     return response.data;
   },
   async invite(email: string): Promise<{ id: string; email: string; expiresAt: string; acceptanceToken: string }> {
@@ -28,6 +41,11 @@ export const vendorStaffApi = {
       { token, ...account },
     );
     return response.data;
+  },
+  async revokeInvitation(id: string): Promise<void> {
+    await apiClient.delete(
+      `/vendors/profile/me/staff/invitations/${encodeURIComponent(id)}`,
+    );
   },
   async remove(id: string): Promise<void> {
     await apiClient.delete(`/vendors/profile/me/staff/${encodeURIComponent(id)}`);

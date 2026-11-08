@@ -1,5 +1,5 @@
 from flask import Blueprint, request
-from flask_jwt_extended import get_jwt_identity, jwt_required
+from flask_jwt_extended import get_jwt, get_jwt_identity, jwt_required
 
 from app.core.exceptions import ApiError
 from app.extensions import db
@@ -25,7 +25,11 @@ def list_payments():
             Payment.booking_id.in_(
                 db.select(Booking.id).where(
                     Booking.event_id.in_(
-                        accessible_event_ids(get_jwt_identity(), "payment.view")
+                        accessible_event_ids(
+                            get_jwt_identity(),
+                            "payment.view",
+                            get_jwt().get("membership_id"),
+                        )
                     )
                 )
             )
@@ -48,7 +52,9 @@ def checkout():
     event = db.session.get(Event, booking.event_id) if booking else None
     if booking is None:
         raise ApiError("Booking not found.", 404)
-    require_event_permission(get_jwt_identity(), event, "payment.manage")
+    require_event_permission(
+        get_jwt_identity(), event, "payment.manage", get_jwt().get("membership_id")
+    )
     return create_checkout_session(booking)
 
 
@@ -63,6 +69,7 @@ def verify_checkout():
         body.get("razorpay_order_id"),
         body.get("razorpay_payment_id"),
         body.get("razorpay_signature"),
+        get_jwt().get("membership_id"),
     )
 
 

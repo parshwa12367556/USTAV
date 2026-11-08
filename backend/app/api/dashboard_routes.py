@@ -1,8 +1,7 @@
 from datetime import date, datetime, timezone
 
 from flask import Blueprint
-from flask_jwt_extended import get_jwt_identity, jwt_required
-from sqlalchemy import or_
+from flask_jwt_extended import get_jwt, get_jwt_identity, jwt_required
 
 from app.core.exceptions import ApiError
 from app.extensions import db
@@ -13,48 +12,33 @@ from app.models.payment import Payment
 from app.models.user import User
 from app.models.vendor import Service, VendorProfile
 from app.models.workspace import FamilyMembership, FamilyWorkspace
+from app.models.vendor_staff import (
+    VendorMembership,
+    VendorMembershipPermission,
+    VendorBookingAssignment,
+)
+from app.services.workspace_service import accessible_event_ids
 
 
 dashboard_bp = Blueprint("dashboard", __name__)
 
 
-def _family_workspaces_for_user(user: User) -> list[FamilyWorkspace]:
-    workspaces = db.session.scalars(
-        db.select(FamilyWorkspace)
-        .outerjoin(
-            FamilyMembership,
-            FamilyMembership.workspace_id == FamilyWorkspace.id,
-        )
-        .where(
-            or_(
-                FamilyWorkspace.owner_user_id == user.id,
-                (FamilyMembership.user_id == user.id),
-            )
-        )
-        .distinct()
-    ).all()
-    return [workspace for workspace in workspaces if workspace.owner_user_id == user.id or db.session.scalar(
-        db.select(FamilyMembership.id).where(
-            FamilyMembership.workspace_id == workspace.id,
-            FamilyMembership.user_id == user.id,
-            FamilyMembership.status == "active",
-        )
-    ) is not None]
-
-
-def _family_events_for_user(user: User) -> list[Event]:
-    owner_ids = [workspace.owner_user_id for workspace in _family_workspaces_for_user(user)]
-    if not owner_ids:
-        return []
+def _family_events_for_user(user: User, membership_id: str | None) -> list[Event]:
     return db.session.scalars(
         db.select(Event)
-        .where(Event.owner_id.in_(owner_ids))
+        .where(
+            Event.id.in_(
+                accessible_event_ids(user.id, "event.view", membership_id)
+            )
+        )
         .order_by(Event.date.asc())
     ).all()
 
 
-def _serialize_family_dashboard(user: User) -> dict[str, object]:
-    events = _family_events_for_user(user)
+def _serialize_family_dashboard(
+    user: User, membership_id: str | None
+) -> dict[str, object]:
+    events = _family_events_for_user(user, membership_id)
     today = date.today()
     total_budget = sum(float(event.budget or 0) for event in events)
     spent_total = 0.0
@@ -76,14 +60,18 @@ def _serialize_family_dashboard(user: User) -> dict[str, object]:
                 pending += 1
         spent_total += float(event.budget or 0) * 0.35
 
-    workspace = None
-    if user.role == "family":
+    membership = db.session.get(FamilyMembership, membership_id) if membership_id else None
+    workspace = (
+        db.session.get(FamilyWorkspace, membership.workspace_id)
+        if membership is not None
+        and membership.user_id == user.id
+        and membership.status == "active"
+        else None
+    )
+    if workspace is None and membership_id is None and user.role == "family":
         workspace = db.session.scalar(
             db.select(FamilyWorkspace).where(FamilyWorkspace.owner_user_id == user.id)
         )
-    if workspace is None:
-        workspaces = _family_workspaces_for_user(user)
-        workspace = workspaces[0] if workspaces else None
 
     return {
         "role": user.role,
@@ -116,19 +104,50 @@ def _serialize_family_dashboard(user: User) -> dict[str, object]:
     }
 
 
-def _vendor_dashboard_for_user(user: User) -> dict[str, object]:
-    vendor = user.vendor_profile or db.session.scalar(
-        db.select(VendorProfile).where(VendorProfile.user_id == user.id)
-    )
-    if vendor is None:
+def _vendor_dashboard_for_user(
+    user: User, membership_id: str | None
+) -> dict[str, object]:
+    membership = db.session.get(VendorMembership, membership_id) if membership_id else None
+    if membership_id and (
+        membership is None
+        or membership.user_id != user.id
+        or membership.status != "active"
+    ):
+        raise ApiError("The active vendor workspace is unavailable.", 403)
+    if membership is None:
+        membership = db.session.scalar(
+            db.select(VendorMembership).where(
+                VendorMembership.user_id == user.id,
+                VendorMembership.role == "owner",
+                VendorMembership.status == "active",
+            )
+        )
+    if membership is None:
         raise ApiError("Create a vendor profile before viewing your dashboard.", 404)
+    vendor = db.session.get(VendorProfile, membership.vendor_id)
+    if vendor is None:
+        raise ApiError("The active vendor workspace is unavailable.", 404)
 
-    services = db.session.scalars(
-        db.select(Service).where(Service.vendor_id == vendor.id)
-    ).all()
-    bookings = db.session.scalars(
-        db.select(Booking).where(Booking.vendor_id == vendor.id)
-    ).all()
+    services = (
+        db.session.scalars(
+            db.select(Service).where(Service.vendor_id == vendor.id)
+        ).all()
+        if membership.role == "owner"
+        else []
+    )
+    bookings_query = db.select(Booking).where(Booking.vendor_id == vendor.id)
+    if membership.role != "owner":
+        bookings_query = bookings_query.join(
+            VendorBookingAssignment,
+            VendorBookingAssignment.booking_id == Booking.id,
+        ).join(
+            VendorMembershipPermission,
+            VendorMembershipPermission.membership_id == membership.id,
+        ).where(
+            VendorBookingAssignment.membership_id == membership.id,
+            VendorMembershipPermission.permission == "booking.view",
+        )
+    bookings = db.session.scalars(bookings_query).all()
     revenue = sum(float(booking.amount) for booking in bookings if booking.status in {"confirmed", "completed"})
     upcoming = sum(1 for booking in bookings if booking.event_date >= date.today())
 
@@ -189,12 +208,23 @@ def personal_dashboard():
     user = db.session.get(User, get_jwt_identity())
     if user is None or not user.is_active:
         raise ApiError("The authenticated account is not available.", 401)
-    if user.role == "admin":
+    membership_id = get_jwt().get("membership_id")
+    family_membership = (
+        db.session.get(FamilyMembership, membership_id) if membership_id else None
+    )
+    vendor_membership = (
+        db.session.get(VendorMembership, membership_id) if membership_id else None
+    )
+    if family_membership and family_membership.user_id == user.id:
+        return _serialize_family_dashboard(user, membership_id)
+    if vendor_membership and vendor_membership.user_id == user.id:
+        return _vendor_dashboard_for_user(user, membership_id)
+    if user.role == "admin" and membership_id in (None, f"admin:{user.id}"):
         return _admin_dashboard_for_user(user)
-    if user.role == "family":
-        return _serialize_family_dashboard(user)
-    if user.role == "vendor":
-        return _vendor_dashboard_for_user(user)
+    if membership_id is None and user.role == "family":
+        return _serialize_family_dashboard(user, None)
+    if membership_id is None and user.role == "vendor":
+        return _vendor_dashboard_for_user(user, None)
     return {"role": user.role, "metrics": {}, "recentActivity": []}
 
 

@@ -1,5 +1,5 @@
 from flask import Blueprint, request
-from flask_jwt_extended import get_jwt_identity, jwt_required
+from flask_jwt_extended import get_jwt, get_jwt_identity, jwt_required
 from sqlalchemy import not_, or_
 
 from app.core.exceptions import ApiError
@@ -33,18 +33,29 @@ availability_schema = VendorAvailabilitySchema()
 
 def _my_vendor() -> VendorProfile:
     user = db.session.get(User, get_jwt_identity())
-    if user is None or user.role != "vendor":
+    if user is None:
         raise ApiError("A vendor account is required.", 403)
     if user.vendor_profile is None:
         raise ApiError("Create your vendor profile first.", 404)
+    membership_id = get_jwt().get("membership_id")
+    if membership_id:
+        membership = db.session.get(VendorMembership, membership_id)
+        if (
+            membership is None
+            or membership.user_id != user.id
+            or membership.vendor_id != user.vendor_profile.id
+            or membership.role != "owner"
+            or membership.status != "active"
+        ):
+            raise ApiError("The active vendor workspace does not allow this action.", 403)
+    elif user.role != "vendor":
+        raise ApiError("A vendor account is required.", 403)
     return user.vendor_profile
 
 
 def _owned_vendor_resource(model: type, resource_id: str, label: str):
     item = db.session.get(model, resource_id)
-    if item is None or item.vendor_id != db.session.scalar(
-        db.select(VendorProfile.id).where(VendorProfile.user_id == get_jwt_identity())
-    ):
+    if item is None or item.vendor_id != _my_vendor().id:
         raise ApiError(f"{label} not found.", 404)
     return item
 
@@ -157,6 +168,8 @@ def create_vendor_profile():
     user = db.session.get(User, get_jwt_identity())
     if user is None or user.role != "vendor":
         raise ApiError("A vendor account is required.", 403)
+    if get_jwt().get("membership_id"):
+        raise ApiError("Switch to a vendor owner workspace to create a business profile.", 403)
     if db.session.scalar(
         db.select(VendorMembership.id).where(
             VendorMembership.user_id == user.id,
@@ -453,6 +466,8 @@ def create_catering_menu(vendor_id: str):
     vendor = db.session.get(VendorProfile, vendor_id)
     if vendor is None or vendor.user_id != get_jwt_identity():
         raise ApiError("Vendor profile not found.", 404)
+    if _my_vendor().id != vendor.id:
+        raise ApiError("Vendor profile not found.", 404)
     if "cater" not in vendor.category.lower():
         raise ApiError("Only catering vendors can add menus.")
     body = request.get_json(silent=True) or {}
@@ -484,6 +499,8 @@ def create_catering_menu(vendor_id: str):
 def create_service(vendor_id: str):
     vendor = db.session.get(VendorProfile, vendor_id)
     if vendor is None or vendor.user_id != get_jwt_identity():
+        raise ApiError("Vendor profile not found.", 404)
+    if _my_vendor().id != vendor.id:
         raise ApiError("Vendor profile not found.", 404)
     body = request.get_json(silent=True) or {}
     name = body.get("name")

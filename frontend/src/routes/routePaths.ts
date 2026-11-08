@@ -3,7 +3,7 @@ export const routePaths = {
   publicHome: '/home',
   login: '/login',
   register: '/register',
-  dashboard: '/dashboard',
+  dashboard: '/family/dashboard',
   events: '/events',
   eventDetails: '/events/:eventId',
   guests: '/guests',

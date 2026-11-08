@@ -6,10 +6,10 @@ import { workspaceApi } from '../../features/workspace/api/workspaceApi';
 import { vendorStaffApi } from '../../features/vendors/api/vendorStaffApi';
 
 function destinationFor(role: string) {
-  if (role === 'vendor_owner' || role === 'vendor_staff') return '/vendor';
-  if (role === 'wedding_planner') return '/planner';
-  if (role === 'super_admin') return '/admin';
-  return '/dashboard';
+  if (role === 'vendor_owner' || role === 'vendor_staff') return '/vendor/dashboard';
+  if (role === 'wedding_planner') return '/planner/dashboard';
+  if (role === 'super_admin') return '/admin/dashboard';
+  return '/family/dashboard';
 }
 
 export function InvitationAcceptancePage() {
@@ -67,8 +67,8 @@ export function InvitationAcceptancePage() {
           <form className="auth-form" onSubmit={(event) => void accept(event)}>
             {!isAuthenticated && <>
               <label>Your name<input name="name" required value={name} onChange={(event) => setName(event.target.value)} minLength={2} /></label>
-              <label>Create a password<input name="password" type="password" autoComplete="new-password" required value={password} onChange={(event) => setPassword(event.target.value)} minLength={8} /></label>
-              <label>Confirm password<input name="confirmPassword" type="password" autoComplete="new-password" required value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} minLength={8} /></label>
+              <label>Create a password<input name="password" type="password" autoComplete="new-password" required value={password} onChange={(event) => setPassword(event.target.value)} minLength={12} /></label>
+              <label>Confirm password<input name="confirmPassword" type="password" autoComplete="new-password" required value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} minLength={12} /></label>
             </>}
             {error && <p className="form-error" role="alert">{error}</p>}
             <button type="submit" className="button button--primary" disabled={busy}>

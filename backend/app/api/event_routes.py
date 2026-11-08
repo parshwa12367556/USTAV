@@ -1,15 +1,17 @@
 from flask import Blueprint, request
 from flask_jwt_extended import get_jwt, get_jwt_identity, jwt_required
 from marshmallow import ValidationError
-from sqlalchemy import and_, or_
-
 from app.core.exceptions import ApiError
 from app.extensions import db
 from app.models.event import Event, Function
 from app.models.user import User
 from app.models.workspace import FamilyMembership, FamilyMembershipPermission, FamilyWorkspace
 from app.schemas.event_schema import EventSchema, FunctionSchema
-from app.services.workspace_service import ensure_family_workspace, require_event_permission
+from app.services.workspace_service import (
+    accessible_event_ids,
+    ensure_family_workspace,
+    require_event_permission,
+)
 
 event_bp = Blueprint("events", __name__)
 event_schema = EventSchema()
@@ -18,7 +20,9 @@ function_schema = FunctionSchema()
 
 def _owned_event(event_id: str, permission: str = "event.view") -> Event:
     event = db.session.get(Event, event_id)
-    return require_event_permission(get_jwt_identity(), event, permission)
+    return require_event_permission(
+        get_jwt_identity(), event, permission, get_jwt().get("membership_id")
+    )
 
 
 @event_bp.get("/events")
@@ -26,26 +30,15 @@ def _owned_event(event_id: str, permission: str = "event.view") -> Event:
 def list_events():
     events = db.session.scalars(
         db.select(Event)
-        .outerjoin(FamilyWorkspace, FamilyWorkspace.owner_user_id == Event.owner_id)
-        .outerjoin(
-            FamilyMembership,
-            FamilyMembership.workspace_id == FamilyWorkspace.id,
-        )
-        .outerjoin(
-            FamilyMembershipPermission,
-            FamilyMembershipPermission.membership_id == FamilyMembership.id,
-        )
         .where(
-            or_(
-                Event.owner_id == get_jwt_identity(),
-                and_(
-                    FamilyMembership.user_id == get_jwt_identity(),
-                    FamilyMembership.status == "active",
-                    FamilyMembershipPermission.permission == "event.view",
-                ),
+            Event.id.in_(
+                accessible_event_ids(
+                    get_jwt_identity(),
+                    "event.view",
+                    get_jwt().get("membership_id"),
+                )
             )
         )
-        .distinct()
         .order_by(Event.date, Event.created_at)
     ).all()
     return [event.to_dict() for event in events]
@@ -60,6 +53,12 @@ def create_event():
         raise ApiError("Family owner account is unavailable.", 403)
     membership_id = get_jwt().get("membership_id")
     membership = db.session.get(FamilyMembership, membership_id) if membership_id else None
+    if membership_id and (
+        membership is None
+        or membership.user_id != owner.id
+        or membership.status != "active"
+    ):
+        raise ApiError("The active family workspace is unavailable.", 403)
     if membership is not None and membership.status == "active" and membership.role != "owner":
         if db.session.scalar(
             db.select(FamilyMembershipPermission.id).where(
@@ -176,7 +175,12 @@ def update_function(function_id: str):
     function = db.session.get(Function, function_id)
     if function is None:
         raise ApiError("Event function not found.", 404)
-    require_event_permission(get_jwt_identity(), function.event, "function.manage")
+    require_event_permission(
+        get_jwt_identity(),
+        function.event,
+        "function.manage",
+        get_jwt().get("membership_id"),
+    )
     payload = function_schema.load(request.get_json(silent=True) or {}, partial=True)
     if not payload:
         raise ValidationError({"_schema": ["At least one field is required."]})
@@ -199,7 +203,12 @@ def delete_function(function_id: str):
     function = db.session.get(Function, function_id)
     if function is None:
         raise ApiError("Event function not found.", 404)
-    require_event_permission(get_jwt_identity(), function.event, "function.manage")
+    require_event_permission(
+        get_jwt_identity(),
+        function.event,
+        "function.manage",
+        get_jwt().get("membership_id"),
+    )
     db.session.delete(function)
     db.session.commit()
     return "", 204

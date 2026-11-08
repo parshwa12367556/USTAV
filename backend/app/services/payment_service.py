@@ -166,6 +166,7 @@ def verify_checkout_payment(
     order_id: str,
     payment_id: str,
     signature: str,
+    membership_id: str | None = None,
 ) -> dict[str, object]:
     if not all(isinstance(value, str) and value for value in (order_id, payment_id, signature)):
         raise ApiError("Razorpay order, payment, and signature values are required.")
@@ -181,7 +182,9 @@ def verify_checkout_payment(
     if (
         transaction is None
         or payment is None
-        or not user_has_event_permission(user_id, event, "payment.manage")
+        or not user_has_event_permission(
+            user_id, event, "payment.manage", membership_id
+        )
     ):
         raise ApiError("Payment order not found.", 404)
     if not _verify_payment_signature(order_id, payment_id, signature):

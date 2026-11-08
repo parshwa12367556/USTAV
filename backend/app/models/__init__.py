@@ -13,7 +13,9 @@ from app.models.platform import CommissionRule, PlatformCategory
 from app.models.quotation import QuotationLineItem, QuotationRequest
 from app.models.rsvp import RSVP
 from app.models.revoked_token import RevokedToken
+from app.models.security_event import SecurityEvent
 from app.models.user import User
+from app.models.user_session import UserSession
 from app.models.vendor import (
     CateringMenu,
     Package,
@@ -70,10 +72,12 @@ __all__ = [
     "QuotationRequest",
     "RSVP",
     "RevokedToken",
+    "SecurityEvent",
     "Service",
     "Transaction",
     "User",
     "UserInvitation",
+    "UserSession",
     "VendorProfile",
     "VendorAvailability",
     "VendorBookingAssignment",

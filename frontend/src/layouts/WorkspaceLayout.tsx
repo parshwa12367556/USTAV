@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import type { EventRecord } from '../types/workspace.types';
-import { initialEvents } from '../data/workspaceData';
 import { eventsApi } from '../features/events/api/eventsApi';
 import type { Event } from '../types/event.types';
 import { useAuth } from '../hooks/useAuth';
@@ -109,6 +108,22 @@ const navigation = [
   { label: 'Family settings', path: '/family-settings', icon: 'settings' as const },
 ];
 
+const navigationPermissions: Record<string, string> = {
+  '/': 'event.view',
+  '/events': 'event.view',
+  '/events/create': 'event.create',
+  '/functions/main': 'function.manage',
+  '/guests': 'guest.view',
+  '/guest-groups': 'guest.view',
+  '/rsvp': 'guest.view',
+  '/invitations': 'invitation.view',
+  '/invitation-editor': 'invitation.create',
+  '/quotations': 'quotation.view',
+  '/budget': 'budget.view',
+  '/bookings': 'booking.view',
+  '/payments': 'payment.view',
+};
+
 const vendorNavigation = [
   { label: 'Studio overview', path: '/vendor', icon: 'grid' as const },
   { label: 'Public profile', path: '/vendor/profile', icon: 'users' as const },
@@ -205,15 +220,7 @@ export function WorkspaceLayout() {
   const location = useLocation();
   const navigate = useNavigate();
   const { user, activeRole, activeWorkspace, activeBusiness, membershipId, memberships, permissions, isAuthenticated } = useAuth();
-  const [events, setEvents] = useState<EventRecord[]>(() => {
-    try {
-      const saved = localStorage.getItem('utsav-events');
-      return saved ? JSON.parse(saved) as EventRecord[] : initialEvents;
-    } catch (error) {
-      console.error('Unable to load saved events.', error);
-      return initialEvents;
-    }
-  });
+  const [events, setEvents] = useState<EventRecord[]>([]);
   const [eventsLoadedFor, setEventsLoadedFor] = useState<string | null>(null);
   const [eventError, setEventError] = useState('');
   const [modalOpen, setModalOpen] = useState(false);
@@ -234,15 +241,17 @@ export function WorkspaceLayout() {
   const isVendorWorkspace = activeRole === 'vendor' || activeRole === 'vendor_owner' || activeRole === 'vendor_staff';
   const isPlannerWorkspace = activeRole === 'wedding_planner';
   const sidebarNavigation = activeRole === 'vendor_staff'
-    ? vendorNavigation.filter((item) => item.path === '/vendor' || item.path === '/vendor/staff')
+    ? vendorNavigation.filter((item) => item.path === '/vendor' || item.path === '/vendor/bookings')
     : allSidebarNavigation.filter((item) => {
-      if (['/members', '/family-settings'].includes(item.path) && activeWorkspace?.role !== 'owner') return false;
-      if (item.path === '/events/create' && !permissions.includes('event.create')) return false;
+      if (['/members', '/family-settings'].includes(item.path) && activeRole !== 'family_owner') return false;
+      const requiredPermission = navigationPermissions[item.path];
+      if (requiredPermission && !permissions.includes(requiredPermission)) return false;
+      if (isPlannerWorkspace && !requiredPermission) return false;
       return true;
     });
   const workspaceName = activeWorkspace?.name || activeBusiness?.name || (isAdminWorkspace ? 'Admin console' : isVendorWorkspace ? 'Vendor studio' : 'Family workspace');
   const workspaceRoleLabel = isAdminWorkspace ? 'Admin workspace' : isVendorWorkspace ? 'Vendor workspace' : isPlannerWorkspace ? 'Planner workspace' : 'Family workspace';
-  const profileRoleLabel = isAdminWorkspace ? 'Platform admin' : activeRole === 'vendor_staff' ? 'Vendor team member' : isVendorWorkspace ? 'Business owner' : activeRole === 'wedding_planner' ? 'Wedding planner' : 'Family admin';
+  const profileRoleLabel = isAdminWorkspace ? 'Platform admin' : activeRole === 'vendor_staff' ? 'Vendor team member' : isVendorWorkspace ? 'Business owner' : isPlannerWorkspace ? 'Wedding planner' : activeRole === 'family_member' ? 'Family member' : 'Family owner';
   const hasFamilyAccount = ['family', 'family_owner', 'family_member', 'wedding_planner'].includes(activeRole ?? user?.role ?? '');
   const activeMembershipKey = `${user?.id ?? ''}:${membershipId ?? ''}`;
   const eventsLoading = isAuthenticated && hasFamilyAccount && eventsLoadedFor !== activeMembershipKey;
@@ -337,19 +346,22 @@ export function WorkspaceLayout() {
             >
               <Icon name={item.icon} size={18} />
               <span>{item.label}</span>
-              {item.path === '/guests' && <span className="nav-count">184</span>}
             </NavLink>
           ))}
         </nav>
 
-        <div className="sidebar-divider" />
-        <div className="sidebar-label">YOUR PEOPLE</div>
-        <button className="person-link" onClick={() => navigate('/settings')}>
-          <span className="avatar avatar--rose">AM</span><span>Aarav & Meera</span>
-        </button>
-        <button className="person-link" onClick={() => navigate('/settings')}>
-          <span className="avatar avatar--gold">D</span><span>Diya’s Mehendi</span>
-        </button>
+        {hasFamilyAccount && (
+          <>
+            <div className="sidebar-divider" />
+            <div className="sidebar-label">YOUR CELEBRATIONS</div>
+            {visibleEvents.slice(0, 2).map((event) => (
+              <button className="person-link" key={event.id} onClick={() => navigate(`/events/${event.id}`)}>
+                <span className={`avatar avatar--${event.accent}`}>{event.initials}</span><span>{event.name}</span>
+              </button>
+            ))}
+            {!visibleEvents.length && <div className="sidebar-empty">No celebrations yet</div>}
+          </>
+        )}
 
         <div className="sidebar-bottom">
           <div className="help-card">

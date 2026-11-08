@@ -2,6 +2,14 @@ import { apiClient } from '../../../services/api/apiClient';
 import type { AuthSession } from '../../../types/auth.types';
 
 export type WorkspaceMemberRole = 'owner' | 'member' | 'planner';
+export type WorkspaceInvitation = {
+  id: string;
+  email: string;
+  role: Exclude<WorkspaceMemberRole, 'owner'>;
+  status: string;
+  expiresAt: string;
+  permissions: WorkspacePermission[];
+};
 
 export type WorkspaceMember = {
   id: string;
@@ -49,20 +57,26 @@ export const workspaceApi = {
     const response = await apiClient.get<WorkspaceMember[]>('/workspace/members');
     return response.data;
   },
+  async listInvitations(): Promise<WorkspaceInvitation[]> {
+    const response = await apiClient.get<WorkspaceInvitation[]>('/workspace/invitations');
+    return response.data;
+  },
   async invite(input: CreateWorkspaceInvitation): Promise<{
     id: string;
     email: string;
-    role: string;
+    role: Exclude<WorkspaceMemberRole, 'owner'>;
     status: string;
     expiresAt: string;
+    permissions: WorkspacePermission[];
     acceptanceToken: string;
   }> {
     const response = await apiClient.post<{
       id: string;
       email: string;
-      role: string;
+      role: Exclude<WorkspaceMemberRole, 'owner'>;
       status: string;
       expiresAt: string;
+      permissions: WorkspacePermission[];
       acceptanceToken: string;
     }>('/workspace/invitations', input);
     return response.data;
@@ -76,6 +90,9 @@ export const workspaceApi = {
       { token, ...account },
     );
     return response.data;
+  },
+  async revokeInvitation(id: string): Promise<void> {
+    await apiClient.delete(`/workspace/invitations/${encodeURIComponent(id)}`);
   },
   async updateMember(
     id: string,

@@ -16,6 +16,18 @@ export type AdminAuditLog = {
   details: Record<string, unknown>;
   createdAt: string;
 };
+export type AdminSecurityEvent = {
+  id: string;
+  userId: string | null;
+  eventType: string;
+  result: string;
+  resourceType: string | null;
+  resourceId: string | null;
+  ipAddress: string | null;
+  userAgent: string | null;
+  metadata: Record<string, unknown>;
+  createdAt: string;
+};
 export type AdminDashboard = {
   metrics: {
     users: { total: number; active: number };
@@ -84,6 +96,10 @@ export const adminApi = {
   },
   async listAuditLogs(): Promise<AdminAuditLog[]> {
     const response = await apiClient.get<AdminAuditLog[]>('/admin/audit-logs');
+    return response.data;
+  },
+  async listSecurityEvents(): Promise<AdminSecurityEvent[]> {
+    const response = await apiClient.get<AdminSecurityEvent[]>('/admin/security-events');
     return response.data;
   },
   async listCategories(): Promise<PlatformCategory[]> {

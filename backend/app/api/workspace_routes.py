@@ -3,11 +3,11 @@ from hashlib import sha256
 import secrets
 
 from flask import Blueprint, request
-from flask_jwt_extended import get_jwt_identity, jwt_required
+from flask_jwt_extended import get_jwt, get_jwt_identity, jwt_required
 from marshmallow import ValidationError
 
 from app.core.exceptions import ApiError
-from app.core.security import hash_password
+from app.core.security import hash_password, validate_password_strength
 from app.extensions import db
 from app.models.planner import PlannerAssignment, PlannerProfile
 from app.models.user import User
@@ -35,7 +35,19 @@ def _owner_workspace():
     user = db.session.get(User, get_jwt_identity())
     if user is None or user.role != "family":
         raise ApiError("Only a family workspace owner can manage members.", 403)
-    return ensure_family_workspace(user)
+    workspace = ensure_family_workspace(user)
+    membership_id = get_jwt().get("membership_id")
+    if membership_id:
+        membership = db.session.get(FamilyMembership, membership_id)
+        if (
+            membership is None
+            or membership.user_id != user.id
+            or membership.status != "active"
+            or membership.role != "owner"
+            or membership.workspace_id != workspace.id
+        ):
+            raise ApiError("Only the active family workspace owner can manage members.", 403)
+    return workspace
 
 
 def _permissions(values: list[str]) -> list[str]:
@@ -92,6 +104,32 @@ def list_members():
     return [_membership_dict(item) for item in memberships]
 
 
+@workspace_bp.get("/workspace/invitations")
+@jwt_required()
+def list_invitations():
+    workspace = _owner_workspace()
+    invitations = db.session.scalars(
+        db.select(FamilyWorkspaceInvitation)
+        .where(FamilyWorkspaceInvitation.workspace_id == workspace.id)
+        .order_by(FamilyWorkspaceInvitation.created_at.desc())
+    ).all()
+    return [
+        {
+            "id": invitation.id,
+            "email": invitation.email,
+            "role": invitation.role,
+            "status": invitation.status,
+            "expiresAt": invitation.expires_at.isoformat(),
+            "permissions": db.session.scalars(
+                db.select(FamilyWorkspaceInvitationPermission.permission).where(
+                    FamilyWorkspaceInvitationPermission.invitation_id == invitation.id
+                )
+            ).all(),
+        }
+        for invitation in invitations
+    ]
+
+
 @workspace_bp.post("/workspace/invitations")
 @jwt_required()
 def create_invitation():
@@ -128,7 +166,8 @@ def create_invitation():
     )
     db.session.add(invitation)
     db.session.flush()
-    for permission in _permissions(payload["permissions"]):
+    permissions = _permissions(payload["permissions"])
+    for permission in permissions:
         db.session.add(
             FamilyWorkspaceInvitationPermission(
                 invitation_id=invitation.id,
@@ -142,8 +181,30 @@ def create_invitation():
         "role": invitation.role,
         "status": invitation.status,
         "expiresAt": invitation.expires_at.isoformat(),
+        "permissions": permissions,
         "acceptanceToken": raw_token,
     }, 201
+
+
+@workspace_bp.delete("/workspace/invitations/<invitation_id>")
+@jwt_required()
+def revoke_invitation(invitation_id: str):
+    workspace = _owner_workspace()
+    invitation = db.session.get(FamilyWorkspaceInvitation, invitation_id)
+    if invitation is None or invitation.workspace_id != workspace.id:
+        raise ApiError("Workspace invitation not found.", 404)
+    if invitation.status != "pending":
+        raise ApiError("Workspace invitation is no longer pending.", 409)
+    expires_at = invitation.expires_at
+    if expires_at.tzinfo is None:
+        expires_at = expires_at.replace(tzinfo=timezone.utc)
+    if expires_at <= datetime.now(timezone.utc):
+        invitation.status = "expired"
+        db.session.commit()
+        raise ApiError("Workspace invitation has expired.", 410)
+    invitation.status = "revoked"
+    db.session.commit()
+    return "", 204
 
 
 @workspace_bp.post("/workspace/invitations/accept")
@@ -173,6 +234,9 @@ def accept_invitation():
             raise ApiError("Name and password are required to create an invited account.", 400)
         if db.session.scalar(db.select(User.id).where(User.email == invitation.email)):
             raise ApiError("Sign in to accept this invitation for your existing account.", 401)
+        validate_password_strength(
+            payload["password"], name=payload["name"], email=invitation.email
+        )
         user = User(
             name=payload["name"].strip(),
             email=invitation.email,
@@ -232,11 +296,13 @@ def accept_invitation():
     invitation.status = "accepted"
     db.session.commit()
     from app.services.auth_service import create_session
+    from app.services.session_cookie import session_json_response
 
-    return {
-        "membership": _membership_dict(membership),
-        "session": create_session(user, membership.id, strict_membership=True),
-    }
+    session = create_session(user, membership.id, strict_membership=True)
+    return session_json_response(
+        {"membership": _membership_dict(membership), "session": session},
+        session,
+    )
 
 
 @workspace_bp.patch("/workspace/members/<membership_id>")

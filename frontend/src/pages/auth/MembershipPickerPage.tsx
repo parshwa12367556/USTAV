@@ -2,13 +2,12 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { authApi } from '../../features/auth/api/authApi';
 import { useAuth } from '../../hooks/useAuth';
-import { tokenStorage } from '../../services/storage/tokenStorage';
 
 function destinationFor(role: string) {
-  if (role === 'super_admin') return '/admin';
-  if (role === 'vendor_owner' || role === 'vendor_staff') return '/vendor';
-  if (role === 'wedding_planner') return '/planner';
-  return '/dashboard';
+  if (role === 'super_admin') return '/admin/dashboard';
+  if (role === 'vendor_owner' || role === 'vendor_staff') return '/vendor/dashboard';
+  if (role === 'wedding_planner') return '/planner/dashboard';
+  return '/family/dashboard';
 }
 
 export function MembershipPickerPage() {
@@ -21,7 +20,7 @@ export function MembershipPickerPage() {
     setBusyId(membershipId);
     setError('');
     try {
-      const session = await authApi.switchMembership(membershipId, tokenStorage.getRefresh());
+      const session = await authApi.switchMembership(membershipId);
       setSession(session);
       navigate(destinationFor(session.activeRole ?? ''), { replace: true });
     } catch (cause) {

@@ -16,9 +16,12 @@ from app.models.event import Event
 from app.models.invitation import InvitationTemplate
 from app.models.payment import Payment
 from app.models.platform import CommissionRule, PlatformCategory
+from app.models.security_event import SecurityEvent
 from app.models.user import User
+from app.models.user_session import UserSession
 from app.models.vendor import VendorProfile
 from app.models.venue import Venue
+from app.services.security_event_service import record_security_event
 
 admin_bp = Blueprint("admin", __name__)
 
@@ -437,7 +440,27 @@ def update_user_status(user_id: str):
         if active_admins <= 1:
             raise ApiError("The last active administrator cannot be suspended.", 409)
 
+    status_changed = user.is_active != is_active
     user.is_active = is_active
+    if status_changed:
+        user.security_version += 1
+        now = datetime.now(timezone.utc)
+        sessions = db.session.scalars(
+            db.select(UserSession).where(
+                UserSession.user_id == user.id,
+                UserSession.revoked_at.is_(None),
+            )
+        ).all()
+        for session in sessions:
+            session.revoked_at = now
+        record_security_event(
+            "admin.user_status_changed",
+            "succeeded",
+            user_id=actor_id,
+            resource_type="user",
+            resource_id=user.id,
+            metadata={"status": body["status"]},
+        )
     db.session.add(
         AuditLog(
             actor_id=actor_id,
@@ -479,6 +502,31 @@ def list_audit_logs():
         }
         for log, actor_email in rows
     ]
+
+
+@admin_bp.get("/security-events")
+@roles_required("admin")
+def list_security_events():
+    statement = db.select(SecurityEvent).order_by(SecurityEvent.created_at.desc()).limit(200)
+    user_id = request.args.get("userId")
+    event_type = request.args.get("eventType")
+    if user_id:
+        statement = statement.where(SecurityEvent.user_id == user_id)
+    if event_type:
+        statement = statement.where(SecurityEvent.event_type == event_type[:80])
+    events = db.session.scalars(statement).all()
+    return [{
+        "id": item.id,
+        "userId": item.user_id,
+        "eventType": item.event_type,
+        "result": item.result,
+        "resourceType": item.resource_type,
+        "resourceId": item.resource_id,
+        "ipAddress": item.ip_address,
+        "userAgent": item.user_agent,
+        "metadata": item.metadata_json,
+        "createdAt": item.created_at.isoformat(),
+    } for item in events]
 
 
 @admin_bp.get("/vendors")

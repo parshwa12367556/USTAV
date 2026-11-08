@@ -9,7 +9,10 @@ from app.core.exceptions import ServiceUnavailable
 def send_verification_code(recipient: str, code: str) -> None:
     mode = current_app.config["OTP_DELIVERY_MODE"]
     if mode == "console" and current_app.config["DEBUG"]:
-        current_app.logger.info("Development verification code for %s: %s", recipient, code)
+        raise ServiceUnavailable(
+            "Email delivery is not configured. Set up an SMTP mail sink for development."
+        )
+    if mode == "disabled" and current_app.config["TESTING"]:
         return
     if mode != "smtp":
         raise ServiceUnavailable("Email delivery is not configured. Contact the administrator.")
