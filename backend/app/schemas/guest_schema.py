@@ -10,7 +10,6 @@ class GuestSchema(Schema):
     group = fields.String(load_default=None, allow_none=True, validate=validate.Length(max=100))
     rsvpStatus = fields.String(dump_only=True)
     plusOnes = fields.Integer(load_default=0, validate=validate.Range(min=0, max=20))
-    invitationToken = fields.String(dump_only=True)
 
 
 class GuestGroupSchema(Schema):

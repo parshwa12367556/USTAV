@@ -17,7 +17,13 @@ def test_guest_can_submit_public_rsvp(client, auth_headers):
         json={"name": "Guest Example", "email": "guest@example.com"},
         headers=auth_headers,
     )
-    token = guest_response.json["invitationToken"]
+    assert "invitationToken" not in guest_response.json
+    invitation_link = client.get(
+        f"/api/v1/guests/{guest_response.json['id']}/invitation-token",
+        headers=auth_headers,
+    )
+    assert invitation_link.status_code == 200
+    token = invitation_link.json["invitationToken"]
 
     invitation = client.get(f"/api/v1/rsvp/{token}")
     assert invitation.status_code == 200
@@ -53,7 +59,11 @@ def test_guest_invitation_token_expires_and_can_be_revoked(client, auth_headers,
         json={"name": "Token Guest"},
         headers=auth_headers,
     ).json
-    old_token = guest["invitationToken"]
+    assert "invitationToken" not in guest
+    old_token = client.get(
+        f"/api/v1/guests/{guest['id']}/invitation-token",
+        headers=auth_headers,
+    ).json["invitationToken"]
     rotated = client.post(
         f"/api/v1/guests/{guest['id']}/invitation-token/rotate",
         headers=auth_headers,
@@ -86,13 +96,17 @@ def test_guest_can_respond_maybe(client, auth_headers):
         json={"name": "Maybe Guest"},
         headers=auth_headers,
     ).json
+    token = client.get(
+        f"/api/v1/guests/{guest['id']}/invitation-token",
+        headers=auth_headers,
+    ).json["invitationToken"]
     response = client.post(
         "/api/v1/rsvp",
-        json={"invitationToken": guest["invitationToken"], "status": "maybe"},
+        json={"invitationToken": token, "status": "maybe"},
     )
     assert response.status_code == 200
     assert client.get(
-        f"/api/v1/rsvp/{guest['invitationToken']}"
+        f"/api/v1/rsvp/{token}"
     ).json["status"] == "maybe"
 
 
@@ -117,6 +131,10 @@ def test_guest_can_be_assigned_functions_and_rsvp_per_function(client, auth_head
         json={"name": "Function Guest"},
         headers=auth_headers,
     ).json
+    invitation_token = client.get(
+        f"/api/v1/guests/{guest['id']}/invitation-token",
+        headers=auth_headers,
+    ).json["invitationToken"]
 
     assigned = client.put(
         f"/api/v1/guests/{guest['id']}/functions",
@@ -126,14 +144,14 @@ def test_guest_can_be_assigned_functions_and_rsvp_per_function(client, auth_head
     assert assigned.status_code == 200
     assert set(assigned.json["functionIds"]) == {haldi["id"], wedding["id"]}
 
-    invitation = client.get(f"/api/v1/rsvp/{guest['invitationToken']}")
+    invitation = client.get(f"/api/v1/rsvp/{invitation_token}")
     assert invitation.status_code == 200
     assert {item["id"] for item in invitation.json["functions"]} == {haldi["id"], wedding["id"]}
 
     response = client.post(
         "/api/v1/rsvp",
         json={
-            "invitationToken": guest["invitationToken"],
+            "invitationToken": invitation_token,
             "status": "attending",
             "functionIds": [haldi["id"]],
         },
@@ -146,7 +164,7 @@ def test_guest_can_be_assigned_functions_and_rsvp_per_function(client, auth_head
         ).all()
         assert [(item.function_id, item.status) for item in responses] == [(haldi["id"], "attending")]
 
-    updated_invitation = client.get(f"/api/v1/rsvp/{guest['invitationToken']}")
+    updated_invitation = client.get(f"/api/v1/rsvp/{invitation_token}")
     statuses = {item["id"]: item["status"] for item in updated_invitation.json["functions"]}
     assert statuses == {haldi["id"]: "attending", wedding["id"]: "pending"}
 
@@ -172,11 +190,15 @@ def test_guest_cannot_rsvp_to_unassigned_or_other_event_function(client, auth_he
         json={"name": "Function Guest"},
         headers=auth_headers,
     ).json
+    invitation_token = client.get(
+        f"/api/v1/guests/{guest['id']}/invitation-token",
+        headers=auth_headers,
+    ).json["invitationToken"]
 
     response = client.post(
         "/api/v1/rsvp",
         json={
-            "invitationToken": guest["invitationToken"],
+            "invitationToken": invitation_token,
             "status": "attending",
             "functionIds": [function["id"]],
         },

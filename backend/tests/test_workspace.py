@@ -53,6 +53,12 @@ def test_family_workspace_invitation_enforces_scoped_permissions(
         headers=auth_headers,
     )
     event_id = created_event.json["id"]
+    created_guest = client.post(
+        f"/api/v1/events/{event_id}/guests",
+        json={"name": "Private Invitation Guest"},
+        headers=auth_headers,
+    )
+    guest_id = created_guest.json["id"]
     member_events = client.get(
         "/api/v1/events",
         headers=member_headers,
@@ -72,6 +78,22 @@ def test_family_workspace_invitation_enforces_scoped_permissions(
         json={"name": "Guest"},
         headers=member_headers,
     ).status_code == 404
+    member_guests = client.get(
+        f"/api/v1/events/{event_id}/guests",
+        headers=member_headers,
+    )
+    assert member_guests.status_code == 200
+    assert all("invitationToken" not in guest for guest in member_guests.json)
+    assert client.get(
+        f"/api/v1/guests/{guest_id}/invitation-token",
+        headers=member_headers,
+    ).status_code == 404
+    owner_token = client.get(
+        f"/api/v1/guests/{guest_id}/invitation-token",
+        headers=auth_headers,
+    )
+    assert owner_token.status_code == 200
+    assert owner_token.json["invitationToken"]
 
     with app.app_context():
         from app.models.workspace import FamilyMembership

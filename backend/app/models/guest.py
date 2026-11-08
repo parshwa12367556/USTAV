@@ -58,7 +58,6 @@ class Guest(BaseModel):
             "group": self.group.name if self.group else None,
             "rsvpStatus": self.rsvp_status,
             "plusOnes": self.plus_ones,
-            "invitationToken": self.invitation_token,
             "invitationExpiresAt": self.invitation_expires_at.isoformat(),
             "invitedFunctionIds": invited_function_ids,
             "functionRsvps": [

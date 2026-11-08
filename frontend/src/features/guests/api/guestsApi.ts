@@ -32,6 +32,12 @@ export const guestsApi = {
   async remove(id: string): Promise<void> {
     await apiClient.delete(`/guests/${encodeURIComponent(id)}`);
   },
+  async getInvitationToken(id: string): Promise<{ guestId: string; invitationToken: string; expiresAt: string }> {
+    const response = await apiClient.get<{ guestId: string; invitationToken: string; expiresAt: string }>(
+      `/guests/${encodeURIComponent(id)}/invitation-token`,
+    );
+    return response.data;
+  },
   async rotateInvitationToken(id: string): Promise<{ guestId: string; invitationToken: string; expiresAt: string }> {
     const response = await apiClient.post<{ guestId: string; invitationToken: string; expiresAt: string }>(
       `/guests/${encodeURIComponent(id)}/invitation-token/rotate`,

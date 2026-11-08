@@ -9,7 +9,6 @@ export type Guest = {
   group?: string;
   rsvpStatus: RSVPStatus;
   plusOnes?: number;
-  invitationToken?: string;
   invitationExpiresAt?: string;
   invitedFunctionIds?: string[];
 };

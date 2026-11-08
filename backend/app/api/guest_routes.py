@@ -300,3 +300,19 @@ def rotate_guest_invitation_token(guest_id: str):
         "invitationToken": guest.invitation_token,
         "expiresAt": guest.invitation_expires_at.isoformat(),
     }
+
+
+@guest_bp.get("/guests/<guest_id>/invitation-token")
+@jwt_required()
+def get_guest_invitation_token(guest_id: str):
+    guest = db.session.get(Guest, guest_id)
+    if guest is None:
+        raise ApiError("Guest not found.", 404)
+    require_event_permission(
+        get_jwt_identity(), guest.event, "guest.update", get_jwt().get("membership_id")
+    )
+    return {
+        "guestId": guest.id,
+        "invitationToken": guest.invitation_token,
+        "expiresAt": guest.invitation_expires_at.isoformat(),
+    }

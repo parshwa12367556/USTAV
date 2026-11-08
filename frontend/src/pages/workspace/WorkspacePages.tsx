@@ -600,6 +600,7 @@ export function BookingsPage() {
 
 export function GuestsPage() {
   const { events, isAuthenticated } = useWorkspace();
+  const { permissions } = useAuth();
   const [query, setQuery] = useState('');
   const [status, setStatus] = useState('Everyone');
   const [guestList, setGuestList] = useState<GuestRecord[]>([]);
@@ -700,16 +701,14 @@ export function GuestsPage() {
     }
   };
   const shareGuestInvitation = async (guest: GuestRecord, renew = false) => {
-    if (!guest.id || !guest.invitationToken) return;
+    if (!guest.id) return;
     setGuestError('');
     setGuestNotice('');
     try {
-      let token = guest.invitationToken;
-      if (renew) {
-        const result = await guestsApi.rotateInvitationToken(guest.id);
-        token = result.invitationToken;
-        setGuestList((current) => current.map((item) => item.id === guest.id ? { ...item, invitationToken: token } : item));
-      }
+      const result = renew
+        ? await guestsApi.rotateInvitationToken(guest.id)
+        : await guestsApi.getInvitationToken(guest.id);
+      const token = result.invitationToken;
       await navigator.clipboard.writeText(`${window.location.origin}/invite/${encodeURIComponent(token)}`);
       setGuestNotice(`${renew ? 'A new invitation link was created and copied' : 'Invitation link copied'} for ${guest.name}.`);
     } catch (cause) {
@@ -792,7 +791,7 @@ export function GuestsPage() {
         <div className="guest-tools"><div className="inline-search"><Icon name="search" size={17} /><input placeholder="Find someone by name or email" value={query} onChange={(event) => setQuery(event.target.value)} /></div><div className="filter-tabs">{['Everyone', 'Confirmed', 'Maybe', 'Pending', 'Declined'].map((item) => <button key={item} className={status === item ? 'filter-tab filter-tab--active' : 'filter-tab'} onClick={() => setStatus(item)}>{item}</button>)}</div>{isAuthenticated && <label className="button button--outline">↑ <span>{importingGuests ? 'Importing…' : 'Import CSV'}</span><input type="file" accept=".csv,text/csv" disabled={importingGuests || !activeEvent} onChange={(event) => { void importGuests(event.currentTarget.files?.[0]); event.currentTarget.value = ''; }} hidden /></label>}<button className="button button--outline" onClick={exportGuestList}>↓ <span>Export list</span></button></div>
         <div className="guest-table">
           <div className="guest-table-row guest-table-header"><span>GUEST</span><span>GROUP</span><span>EMAIL ADDRESS</span><span>RSVP</span><span /></div>
-          {results.map((guest, index) => <div className="guest-table-row" key={guest.id ?? guest.email ?? guest.name}><div className="guest-name"><span className={`avatar avatar--guest avatar--guest-${index % 4}`}>{guest.name.split(' ').map((part) => part[0]).slice(0, 2).join('')}</span><strong>{guest.name}</strong></div><span className="table-secondary">{guest.group}</span><span className="table-secondary">{guest.email}</span><StatusPill status={guest.status} /><div className="guest-row-actions">{guest.id && <><button className="plain-icon" aria-label={`Edit ${guest.name}`} onClick={() => { setEditingGuest(guest); setGuestModalOpen(true); }}>Edit</button>{eventFunctions.length > 0 && <button className="plain-icon" aria-label={`Assign event functions to ${guest.name}`} onClick={() => openFunctionAssignment(guest)}>Functions</button>}<button className="plain-icon" aria-label={`Copy invitation link for ${guest.name}`} onClick={() => void shareGuestInvitation(guest)}>Link</button><button className="plain-icon" aria-label={`Renew invitation link for ${guest.name}`} onClick={() => void shareGuestInvitation(guest, true)}>Renew</button><button className="plain-icon" aria-label={`Remove ${guest.name}`} onClick={() => void removeGuest(guest)}>×</button></>}</div></div>)}
+          {results.map((guest, index) => <div className="guest-table-row" key={guest.id ?? guest.email ?? guest.name}><div className="guest-name"><span className={`avatar avatar--guest avatar--guest-${index % 4}`}>{guest.name.split(' ').map((part) => part[0]).slice(0, 2).join('')}</span><strong>{guest.name}</strong></div><span className="table-secondary">{guest.group}</span><span className="table-secondary">{guest.email}</span><StatusPill status={guest.status} /><div className="guest-row-actions">{guest.id && <><button className="plain-icon" aria-label={`Edit ${guest.name}`} onClick={() => { setEditingGuest(guest); setGuestModalOpen(true); }}>Edit</button>{eventFunctions.length > 0 && <button className="plain-icon" aria-label={`Assign event functions to ${guest.name}`} onClick={() => openFunctionAssignment(guest)}>Functions</button>}{permissions.includes('guest.update') && <><button className="plain-icon" aria-label={`Copy invitation link for ${guest.name}`} onClick={() => void shareGuestInvitation(guest)}>Link</button><button className="plain-icon" aria-label={`Renew invitation link for ${guest.name}`} onClick={() => void shareGuestInvitation(guest, true)}>Renew</button></>}<button className="plain-icon" aria-label={`Remove ${guest.name}`} onClick={() => void removeGuest(guest)}>×</button></>}</div></div>)}
           {!results.length && <div className="empty-state"><strong>No guests found</strong><p>Try a different name or RSVP filter.</p></div>}
         </div>
         <div className="table-footer"><span>Showing {results.length} {results.length === 1 ? 'guest' : 'guests'}</span><span>RSVP details update as your loved ones reply.</span></div>
@@ -816,7 +815,6 @@ export function GuestsPage() {
 function toGuestRecord(guest: Guest): GuestRecord {
   return {
     id: guest.id,
-    invitationToken: guest.invitationToken,
     invitedFunctionIds: guest.invitedFunctionIds,
     name: guest.name,
     group: guest.group ?? '',
