@@ -1,4 +1,5 @@
 import { apiClient } from '../../../services/api/apiClient';
+import type { AuthSession } from '../../../types/auth.types';
 
 export type VendorStaffMember = {
   id: string;
@@ -21,10 +22,10 @@ export const vendorStaffApi = {
     );
     return response.data;
   },
-  async accept(token: string): Promise<{ membership: VendorStaffMember }> {
-    const response = await apiClient.post<{ membership: VendorStaffMember }>(
+  async accept(token: string, account?: { name: string; password: string }): Promise<{ membership: VendorStaffMember; session: AuthSession }> {
+    const response = await apiClient.post<{ membership: VendorStaffMember; session: AuthSession }>(
       '/vendors/staff/invitations/accept',
-      { token },
+      { token, ...account },
     );
     return response.data;
   },

@@ -14,6 +14,7 @@ from app.models.vendor import (
     VendorAvailability,
     VendorProfile,
 )
+from app.models.vendor_staff import VendorMembership
 from app.schemas.vendor_schema import (
     PortfolioItemSchema,
     VendorAvailabilitySchema,
@@ -156,6 +157,14 @@ def create_vendor_profile():
     user = db.session.get(User, get_jwt_identity())
     if user is None or user.role != "vendor":
         raise ApiError("A vendor account is required.", 403)
+    if db.session.scalar(
+        db.select(VendorMembership.id).where(
+            VendorMembership.user_id == user.id,
+            VendorMembership.status == "active",
+            VendorMembership.role == "staff",
+        )
+    ):
+        raise ApiError("Vendor staff accounts cannot create an owner profile.", 403)
     if user.vendor_profile is not None:
         raise ApiError("A vendor profile already exists for this account.", 409)
     payload = vendor_schema.load(request.get_json(silent=True) or {})
@@ -164,10 +173,20 @@ def create_vendor_profile():
         business_name=payload["name"].strip(),
         category=payload["category"].strip(),
         city=payload["city"].strip(),
+        address=payload.get("address"),
         starting_price=payload.get("startingPrice"),
         description=payload.get("description"),
     )
     db.session.add(profile)
+    db.session.flush()
+    db.session.add(
+        VendorMembership(
+            vendor_id=profile.id,
+            user_id=user.id,
+            role="owner",
+            status="active",
+        )
+    )
     db.session.commit()
     return profile.to_dict(), 201
 
@@ -193,6 +212,7 @@ def update_vendor_profile():
         "name": "business_name",
         "category": "category",
         "city": "city",
+        "address": "address",
         "startingPrice": "starting_price",
         "description": "description",
     }

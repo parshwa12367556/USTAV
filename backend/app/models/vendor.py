@@ -9,6 +9,7 @@ class VendorProfile(BaseModel):
     business_name = db.Column(db.String(180), nullable=False)
     category = db.Column(db.String(100), nullable=False, index=True)
     city = db.Column(db.String(120), nullable=False, index=True)
+    address = db.Column(db.String(500), nullable=True)
     rating = db.Column(db.Numeric(2, 1), nullable=False, default=0)
     review_count = db.Column(db.Integer, nullable=False, default=0)
     starting_price = db.Column(db.Numeric(12, 2), nullable=True)

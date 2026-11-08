@@ -70,6 +70,7 @@ def create_app(config_name: str | None = None, overrides: dict[str, Any] | None 
 
     from app import models  # noqa: F401
     from app.api import api_v1
+    from app.models.revoked_token import RevokedToken
     from app.models.user import User
 
     @jwt.token_in_blocklist_loader
@@ -80,6 +81,7 @@ def create_app(config_name: str | None = None, overrides: dict[str, Any] | None 
             or not user.is_active
             or not user.is_verified
             or jwt_payload.get("role") != user.role
+            or db.session.get(RevokedToken, jwt_payload.get("jti")) is not None
         )
 
     app.register_blueprint(api_v1, url_prefix="/api/v1")

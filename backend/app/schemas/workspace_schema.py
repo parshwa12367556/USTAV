@@ -13,6 +13,8 @@ class WorkspaceInvitationSchema(Schema):
 
 class AcceptWorkspaceInvitationSchema(Schema):
     token = fields.String(required=True, validate=validate.Length(min=40, max=100))
+    name = fields.String(load_default=None, allow_none=True, validate=validate.Length(min=2, max=120))
+    password = fields.String(load_default=None, allow_none=True, validate=validate.Length(min=8, max=128), load_only=True)
 
 
 class UpdateWorkspaceMembershipSchema(Schema):

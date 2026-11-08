@@ -1,4 +1,4 @@
-export type UserRole = 'family' | 'vendor' | 'admin' | 'guest';
+export type UserRole = 'family' | 'vendor' | 'planner' | 'admin' | 'guest';
 export type AccountStatus = 'active' | 'pending' | 'suspended';
 
 export type User = {

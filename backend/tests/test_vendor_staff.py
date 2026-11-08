@@ -157,3 +157,47 @@ def test_vendor_staff_invitation_is_email_bound_and_vendor_owner_only(client, ap
         headers=staff_headers,
     )
     assert forbidden.status_code == 403
+
+
+def test_vendor_staff_invitation_creates_new_account(client, app):
+    owner_id, owner_token = create_vendor_user(app, "Owner", "new-owner@vendor.test")
+    with app.app_context():
+        db.session.add(
+            VendorProfile(
+                user_id=owner_id,
+                business_name="New Staff Studio",
+                category="Photography",
+                city="Jaipur",
+            )
+        )
+        db.session.commit()
+    invitation = client.post(
+        "/api/v1/vendors/profile/me/staff/invitations",
+        json={"email": "new-staff@vendor.test"},
+        headers={"Authorization": f"Bearer {owner_token}"},
+    )
+    assert invitation.status_code == 201
+    accepted = client.post(
+        "/api/v1/vendors/staff/invitations/accept",
+        json={
+            "token": invitation.json["acceptanceToken"],
+            "name": "New Team Member",
+            "password": "staff-password-123",
+        },
+    )
+    assert accepted.status_code == 200
+    assert accepted.json["session"]["activeRole"] == "vendor_staff"
+    assert client.post(
+        "/api/v1/vendors/profile",
+        json={
+            "name": "Escalation Attempt",
+            "category": "Photography",
+            "city": "Jaipur",
+        },
+        headers={"Authorization": f"Bearer {accepted.json['session']['accessToken']}"},
+    ).status_code == 403
+    login = client.post(
+        "/api/v1/auth/login",
+        json={"email": "new-staff@vendor.test", "password": "staff-password-123"},
+    )
+    assert login.status_code == 200

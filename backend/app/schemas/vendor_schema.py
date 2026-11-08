@@ -6,6 +6,7 @@ class VendorProfileSchema(Schema):
     name = fields.String(required=True, validate=validate.Length(min=2, max=180))
     category = fields.String(required=True, validate=validate.Length(min=2, max=100))
     city = fields.String(required=True, validate=validate.Length(min=2, max=120))
+    address = fields.String(load_default=None, allow_none=True, validate=validate.Length(max=500))
     rating = fields.Float(dump_only=True)
     reviewCount = fields.Integer(dump_only=True)
     startingPrice = fields.Decimal(load_default=None, allow_none=True, as_string=False, validate=validate.Range(min=0))

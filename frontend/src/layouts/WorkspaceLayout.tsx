@@ -5,6 +5,7 @@ import { initialEvents } from '../data/workspaceData';
 import { eventsApi } from '../features/events/api/eventsApi';
 import type { Event } from '../types/event.types';
 import { useAuth } from '../hooks/useAuth';
+import { UserMenu } from '../components/common/UserMenu';
 
 function toEventRecord(event: Event): EventRecord {
   const status = event.status === 'completed' ? 'Completed'
@@ -147,6 +148,7 @@ const titles: Record<string, { title: string; eyebrow: string }> = {
   '/vendor': { title: 'Your studio', eyebrow: 'A LOVELY DAY TO GROW YOUR BUSINESS' },
   '/': { title: 'Your workspace', eyebrow: 'MONDAY, 9 NOVEMBER 2026' },
   '/dashboard': { title: 'Your workspace', eyebrow: 'MONDAY, 9 NOVEMBER 2026' },
+  '/planner': { title: 'Planner dashboard', eyebrow: 'COORDINATE EVERY CELEBRATION' },
   '/events': { title: 'Your events', eyebrow: 'PLAN THE MOMENTS THAT MATTER' },
   '/guests': { title: 'Guest list', eyebrow: 'EVERYONE, ALL IN ONE PLACE' },
   '/invitations': { title: 'Invitations', eyebrow: 'SET THE TONE FOR YOUR DAY' },
@@ -202,7 +204,7 @@ const catalogTitles: Record<string, string> = {
 export function WorkspaceLayout() {
   const location = useLocation();
   const navigate = useNavigate();
-  const { user, activeRole, activeWorkspace, isAuthenticated } = useAuth();
+  const { user, activeRole, activeWorkspace, activeBusiness, membershipId, memberships, permissions, isAuthenticated } = useAuth();
   const [events, setEvents] = useState<EventRecord[]>(() => {
     try {
       const saved = localStorage.getItem('utsav-events');
@@ -212,7 +214,7 @@ export function WorkspaceLayout() {
       return initialEvents;
     }
   });
-  const [eventsLoading, setEventsLoading] = useState(false);
+  const [eventsLoadedFor, setEventsLoadedFor] = useState<string | null>(null);
   const [eventError, setEventError] = useState('');
   const [modalOpen, setModalOpen] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
@@ -225,35 +227,49 @@ export function WorkspaceLayout() {
     title: catalogTitles[location.pathname] ?? (location.pathname.startsWith('/admin/') ? 'Admin workspace' : location.pathname.startsWith('/vendor/') ? 'Vendor studio' : 'Your celebration'),
     eyebrow: location.pathname.startsWith('/admin/') ? 'THE UTSAV CONTROL ROOM' : location.pathname.startsWith('/vendor/') ? 'YOUR BUSINESS, ALL TOGETHER' : 'PLAN THE MOMENTS THAT MATTER',
   };
-  const sidebarNavigation = location.pathname.startsWith('/admin') ? adminNavigation : location.pathname.startsWith('/vendor') ? vendorNavigation : navigation;
+  const allSidebarNavigation = location.pathname.startsWith('/admin') ? adminNavigation : location.pathname.startsWith('/vendor') ? vendorNavigation : navigation;
   const displayName = user?.name?.trim() || 'Your account';
   const displayInitials = getInitials(displayName);
-  const workspaceName = activeWorkspace?.name || (activeRole === 'admin' ? 'Admin console' : activeRole === 'vendor' ? 'Vendor studio' : 'Family workspace');
-  const workspaceRoleLabel = activeRole === 'admin' ? 'Admin workspace' : activeRole === 'vendor' ? 'Vendor workspace' : 'Family workspace';
-  const profileRoleLabel = activeRole === 'admin' ? 'Platform admin' : activeRole === 'vendor' ? 'Business owner' : 'Family admin';
+  const isAdminWorkspace = activeRole === 'admin' || activeRole === 'super_admin';
+  const isVendorWorkspace = activeRole === 'vendor' || activeRole === 'vendor_owner' || activeRole === 'vendor_staff';
+  const isPlannerWorkspace = activeRole === 'wedding_planner';
+  const sidebarNavigation = activeRole === 'vendor_staff'
+    ? vendorNavigation.filter((item) => item.path === '/vendor' || item.path === '/vendor/staff')
+    : allSidebarNavigation.filter((item) => {
+      if (['/members', '/family-settings'].includes(item.path) && activeWorkspace?.role !== 'owner') return false;
+      if (item.path === '/events/create' && !permissions.includes('event.create')) return false;
+      return true;
+    });
+  const workspaceName = activeWorkspace?.name || activeBusiness?.name || (isAdminWorkspace ? 'Admin console' : isVendorWorkspace ? 'Vendor studio' : 'Family workspace');
+  const workspaceRoleLabel = isAdminWorkspace ? 'Admin workspace' : isVendorWorkspace ? 'Vendor workspace' : isPlannerWorkspace ? 'Planner workspace' : 'Family workspace';
+  const profileRoleLabel = isAdminWorkspace ? 'Platform admin' : activeRole === 'vendor_staff' ? 'Vendor team member' : isVendorWorkspace ? 'Business owner' : activeRole === 'wedding_planner' ? 'Wedding planner' : 'Family admin';
+  const hasFamilyAccount = ['family', 'family_owner', 'family_member', 'wedding_planner'].includes(activeRole ?? user?.role ?? '');
+  const activeMembershipKey = `${user?.id ?? ''}:${membershipId ?? ''}`;
+  const eventsLoading = isAuthenticated && hasFamilyAccount && eventsLoadedFor !== activeMembershipKey;
+  const visibleEvents = eventsLoading || !hasFamilyAccount ? [] : events;
 
   useEffect(() => {
-    if (!isAuthenticated) return;
+    if (!isAuthenticated || !hasFamilyAccount || !user?.id) return;
     let active = true;
-    setEventsLoading(true);
     setEventError('');
     eventsApi.list()
       .then((result) => {
-        if (active) setEvents(result.map(toEventRecord));
+        if (active) {
+          setEvents(result.map(toEventRecord));
+          setEventsLoadedFor(activeMembershipKey);
+        }
       })
       .catch((error: unknown) => {
         if (active) {
           setEvents([]);
           setEventError(error instanceof Error ? error.message : 'Unable to load your events.');
+          setEventsLoadedFor(activeMembershipKey);
         }
-      })
-      .finally(() => {
-        if (active) setEventsLoading(false);
       });
     return () => {
       active = false;
     };
-  }, [isAuthenticated, user?.id]);
+  }, [isAuthenticated, user?.id, user?.role, activeMembershipKey, hasFamilyAccount]);
 
   useEffect(() => {
     const handleShortcut = (event: KeyboardEvent) => {
@@ -307,7 +323,7 @@ export function WorkspaceLayout() {
           <span className="workspace-switcher-copy"><strong>{workspaceName}</strong><small>{workspaceRoleLabel}</small></span>
           <Icon name="chevron" size={16} />
         </button>
-        {workspaceMenuOpen && <div className="workspace-menu"><span>SWITCH YOUR SPACE</span><button onClick={() => { navigate('/'); setWorkspaceMenuOpen(false); }}><i>F</i><span><strong>Family workspace</strong><small>Plan your celebrations</small></span>{location.pathname !== '/admin' && location.pathname !== '/vendor' && <b>✓</b>}</button><button onClick={() => { navigate('/vendor'); setWorkspaceMenuOpen(false); }}><i>V</i><span><strong>Vendor studio</strong><small>Manage your business</small></span></button><button onClick={() => { navigate('/admin'); setWorkspaceMenuOpen(false); }}><i>A</i><span><strong>Admin console</strong><small>Manage the marketplace</small></span></button></div>}
+        {workspaceMenuOpen && <div className="workspace-menu"><span>SWITCH YOUR SPACE</span>{memberships.length > 1 ? <button onClick={() => { navigate('/choose-workspace'); setWorkspaceMenuOpen(false); }}><i>↔</i><span><strong>Choose a workspace</strong><small>Switch to another account or team</small></span></button> : <p>You have one active workspace.</p>}</div>}
 
         <div className="sidebar-label">YOUR SPACE</div>
         <nav className="main-nav" aria-label="Main navigation">
@@ -393,7 +409,7 @@ export function WorkspaceLayout() {
             >
               <Icon name="bell" size={19} /><span className="notification-dot" />
             </button>
-            <button className="topbar-avatar" onClick={() => navigate('/settings')} aria-label="Open profile">PS</button>
+            <UserMenu />
           </div>
         </header>
 
@@ -411,7 +427,7 @@ export function WorkspaceLayout() {
             <button className="button button--primary" onClick={() => setModalOpen(true)}><Icon name="plus" size={17} />Create an event</button>
           </div>
           <Outlet context={{
-            events,
+            events: visibleEvents,
             saveEvent,
             openCreateEvent: () => setModalOpen(true),
             eventsLoading,

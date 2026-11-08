@@ -8,9 +8,11 @@ from app.models.invitation import InvitationTemplate, UserInvitation
 from app.models.notification import Notification
 from app.models.organization import Organization
 from app.models.payment import Invoice, Payment, Transaction
+from app.models.planner import PlannerAssignment, PlannerProfile
 from app.models.platform import CommissionRule, PlatformCategory
 from app.models.quotation import QuotationLineItem, QuotationRequest
 from app.models.rsvp import RSVP
+from app.models.revoked_token import RevokedToken
 from app.models.user import User
 from app.models.vendor import (
     CateringMenu,
@@ -60,11 +62,14 @@ __all__ = [
     "Organization",
     "Package",
     "Payment",
+    "PlannerAssignment",
+    "PlannerProfile",
     "Portfolio",
     "PlatformCategory",
     "QuotationLineItem",
     "QuotationRequest",
     "RSVP",
+    "RevokedToken",
     "Service",
     "Transaction",
     "User",

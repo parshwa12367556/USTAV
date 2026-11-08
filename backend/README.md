@@ -43,11 +43,17 @@ Online payments use Razorpay. Set `RAZORPAY_KEY_ID` and `RAZORPAY_KEY_SECRET` in
 
 The migrations include a starter invitation template collection and support password-reset codes. Configure SMTP delivery before enabling account recovery in a production environment.
 
+## Authentication sessions
+
+Refresh tokens are rotated when used, and the previous refresh token is immediately invalidated. `POST /api/v1/auth/logout` revokes the current access and refresh tokens. Migration `4f2c8a9d1e63` adds planner profiles and business addresses; it follows migration `2a9c5e1f7b40`, which adds persistent revoked-token storage. Apply migrations with `flask --app run db upgrade` before starting an existing database with this version.
+
 ## Workspace access
 
-Family accounts own a workspace. Owners can create one-time, email-bound invitation links for family members or planners and assign their allowed event permissions. These links expire after seven days. The link is returned to the owner to share manually; workspace invitations are not emailed by the application yet. Invitees must register or sign in with the invited email before accepting.
+Registration is available for family/event organizers, vendors/service providers, and wedding planners through `/api/v1/auth/register/family`, `/api/v1/auth/register/vendor`, and `/api/v1/auth/register/planner`. Each registration is email-verified before sign-in. Admin accounts cannot be created through public registration. Vendor accounts receive a pending profile and owner membership; planners receive a planner profile. `/api/v1/auth/me` returns the authenticated account's active membership and all memberships. `/api/v1/auth/switch-membership` switches only to a membership owned by that account and rotates its tokens.
 
-Vendor owners can invite staff using the same seven-day, manual-link workflow and assign staff to individual bookings. Staff access is limited to assigned bookings and the permitted booking actions; they cannot manage vendor profile or pricing settings.
+Family accounts own a workspace. Owners can create one-time, email-bound invitation links for family members or planners and assign their allowed event permissions, including whether the invitee can create events. These links expire after seven days. The link is returned to the owner to share manually; workspace invitations are not emailed by the application yet. An invitee can create an account from the token-bound link, or sign in to an existing account with the invited email. Planner invitations create a planner profile and assignment while preserving any existing account memberships.
+
+Vendor owners can invite staff using the same seven-day, manual-link workflow and assign staff to individual bookings. An invitee can create an account from the token-bound link, or sign in to an existing account with the invited email. Staff access is limited to assigned bookings and the permitted booking actions; they cannot manage vendor profile or pricing settings.
 
 Guest RSVP links expire after `INVITATION_TOKEN_EXPIRY_DAYS` (90 days by default). Republishing an invitation or renewing a guest link rotates its token, invalidating the previous link. Set the expiry variable to a positive number of days in `.env`.
 

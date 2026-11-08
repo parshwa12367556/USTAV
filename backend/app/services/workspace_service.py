@@ -13,6 +13,7 @@ from app.models.workspace import (
 
 WORKSPACE_PERMISSIONS = {
     "event.view",
+    "event.create",
     "event.update",
     "event.delete",
     "function.manage",
@@ -44,6 +45,11 @@ def ensure_family_workspace(user: User) -> FamilyWorkspace:
         db.select(FamilyWorkspace).where(FamilyWorkspace.owner_user_id == user.id)
     )
     if workspace is None:
+        existing_membership = db.session.scalar(
+            db.select(FamilyMembership.id).where(FamilyMembership.user_id == user.id)
+        )
+        if existing_membership is not None:
+            raise ApiError("Only a family workspace owner can perform this action.", 403)
         workspace = FamilyWorkspace(owner_user_id=user.id, name=f"{user.name}'s Family")
         db.session.add(workspace)
         db.session.flush()

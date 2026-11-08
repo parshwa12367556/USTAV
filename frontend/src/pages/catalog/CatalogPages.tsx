@@ -928,12 +928,44 @@ function AuthPage({ spec }: { spec: PageSpec }) {
   const { setSession } = useAuth();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [registerRole, setRegisterRole] = useState<'family' | 'vendor' | 'planner'>('family');
   const [notice, setNotice] = useState(
     typeof location.state === 'object' && location.state !== null && 'notice' in location.state
       ? String(location.state.notice)
       : '',
   );
   const fieldLabel = (field: string) => field.toLowerCase().includes('password') ? 'password' : field.toLowerCase().includes('email') ? 'email' : 'text';
+  const registrationFields = registerRole === 'family'
+    ? [
+      { name: 'name', label: 'Your name', required: true, type: 'text' },
+      { name: 'email', label: 'Email address', required: true, type: 'email' },
+      { name: 'phone', label: 'Phone number', required: false, type: 'tel' },
+      { name: 'password', label: 'Create a password', required: true, type: 'password' },
+      { name: 'confirmPassword', label: 'Confirm password', required: true, type: 'password' },
+      { name: 'workspaceName', label: 'Family or workspace name', required: true, type: 'text' },
+    ]
+    : registerRole === 'vendor'
+      ? [
+        { name: 'name', label: 'Your name', required: true, type: 'text' },
+        { name: 'email', label: 'Email address', required: true, type: 'email' },
+        { name: 'phone', label: 'Phone number', required: false, type: 'tel' },
+        { name: 'password', label: 'Create a password', required: true, type: 'password' },
+        { name: 'confirmPassword', label: 'Confirm password', required: true, type: 'password' },
+        { name: 'businessName', label: 'Business name', required: true, type: 'text' },
+        { name: 'category', label: 'Service category', required: true, type: 'text' },
+        { name: 'city', label: 'City', required: true, type: 'text' },
+        { name: 'address', label: 'Business address', required: true, type: 'text' },
+        { name: 'description', label: 'Business description (optional)', required: false, type: 'text' },
+      ]
+      : [
+        { name: 'name', label: 'Your name', required: true, type: 'text' },
+        { name: 'email', label: 'Email address', required: true, type: 'email' },
+        { name: 'phone', label: 'Phone number', required: false, type: 'tel' },
+        { name: 'password', label: 'Create a password', required: true, type: 'password' },
+        { name: 'confirmPassword', label: 'Confirm password', required: true, type: 'password' },
+        { name: 'companyName', label: 'Planning business name (optional)', required: false, type: 'text' },
+        { name: 'yearsExperience', label: 'Years of experience', required: false, type: 'number' },
+      ];
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setError('');
@@ -945,6 +977,10 @@ function AuthPage({ spec }: { spec: PageSpec }) {
       if (spec.path === '/login') {
         const session = await authApi.login({ email, password: String(values.get('password') ?? '') });
         setSession(session);
+        if ((session.memberships?.length ?? 0) > 1) {
+          navigate('/choose-workspace', { replace: true });
+          return;
+        }
         const from = location.state && typeof location.state === 'object' && 'from' in location.state
           ? location.state.from
           : null;
@@ -956,13 +992,43 @@ function AuthPage({ spec }: { spec: PageSpec }) {
         return;
       }
       if (spec.path === '/register') {
-        await authApi.register({
+        const password = String(values.get('password') ?? '');
+        if (password !== String(values.get('confirmPassword') ?? '')) {
+          setError('The passwords do not match.');
+          return;
+        }
+        const base = {
           name: String(values.get('name') ?? '').trim(),
           email,
           phone: String(values.get('phone') ?? '').trim(),
-          password: String(values.get('password') ?? ''),
-          role: 'family',
-        });
+          password,
+        };
+        if (registerRole === 'family') {
+          await authApi.register({
+            ...base,
+            role: 'family',
+            workspaceName: String(values.get('workspaceName') ?? '').trim(),
+          });
+        } else if (registerRole === 'vendor') {
+          await authApi.register({
+            ...base,
+            role: 'vendor',
+            businessName: String(values.get('businessName') ?? '').trim(),
+            category: String(values.get('category') ?? '').trim(),
+            city: String(values.get('city') ?? '').trim(),
+            address: String(values.get('address') ?? '').trim(),
+            description: String(values.get('description') ?? '').trim(),
+          });
+        } else {
+          await authApi.register({
+            ...base,
+            role: 'planner',
+            companyName: String(values.get('companyName') ?? '').trim(),
+            yearsExperience: values.get('yearsExperience')
+              ? Number(values.get('yearsExperience'))
+              : undefined,
+          });
+        }
         navigate(`/verify-otp?email=${encodeURIComponent(email)}`);
         return;
       }
@@ -973,7 +1039,7 @@ function AuthPage({ spec }: { spec: PageSpec }) {
         }
         const session = await authApi.verifyOtp(email, String(values.get('code') ?? ''));
         setSession(session);
-        navigate('/', { replace: true });
+        navigate((session.memberships?.length ?? 0) > 1 ? '/choose-workspace' : '/', { replace: true });
         return;
       }
       if (spec.path === '/forgot-password') {
@@ -1018,9 +1084,43 @@ function AuthPage({ spec }: { spec: PageSpec }) {
       <div className="auth-panel-top"><span>Already have a workspace?</span><button type="button" onClick={() => navigate(spec.path === '/login' ? '/register' : '/login')}>{spec.path === '/login' ? 'Create account' : 'Sign in'} →</button></div>
       <div className="auth-form-wrap">
         <>
-          <span className="eyebrow">{spec.eyebrow}</span><h2>{spec.title}</h2><p>{spec.description}</p>
+          <span className="eyebrow">{spec.eyebrow}</span>
+          <h2>{spec.path === '/register'
+            ? registerRole === 'vendor' ? 'Create your vendor workspace.'
+              : registerRole === 'planner' ? 'Create your planner workspace.'
+                : 'Let’s make room for a celebration.'
+            : spec.title}</h2>
+          <p>{spec.path === '/register'
+            ? registerRole === 'vendor' ? 'Share your business details so families can discover your services.'
+              : registerRole === 'planner' ? 'Set up your professional workspace and start coordinating celebrations.'
+                : spec.description
+            : spec.description}</p>
           <form className="auth-form" onSubmit={handleSubmit}>
-            {(spec.fields ?? []).map((field) => {
+            {spec.path === '/register' && (
+              <label>Account type
+                <select value={registerRole} onChange={(event) => setRegisterRole(event.target.value as typeof registerRole)}>
+                  <option value="family">Family / Event Organizer</option>
+                  <option value="vendor">Vendor / Service Provider</option>
+                  <option value="planner">Wedding Planner</option>
+                </select>
+              </label>
+            )}
+            {spec.path === '/register'
+              ? registrationFields.map((field) => (
+                <label key={field.name}>{field.label}
+                  <input
+                    name={field.name}
+                    required={field.required}
+                    type={field.type}
+                    autoComplete={field.name.includes('Password') || field.name === 'password' ? 'new-password' : field.name === 'email' ? 'email' : undefined}
+                    placeholder={field.type === 'password' ? 'At least 8 characters' : `Enter ${field.label.toLowerCase()}`}
+                    minLength={field.type === 'password' ? 8 : undefined}
+                    min={field.type === 'number' ? 0 : undefined}
+                    max={field.type === 'number' ? 80 : undefined}
+                  />
+                </label>
+              ))
+              : (spec.fields ?? []).map((field) => {
               const normalized = field.toLowerCase();
               const name = normalized.includes('email') ? 'email'
                 : normalized.includes('password') && normalized.includes('confirm') ? 'confirmPassword'

@@ -43,6 +43,7 @@ apiClient.interceptors.response.use(
     const refreshToken = tokenStorage.getRefresh();
     if (!refreshToken) {
       tokenStorage.clear();
+      window.dispatchEvent(new Event('utsav:session-expired'));
       return Promise.reject(error);
     }
 
@@ -61,9 +62,17 @@ apiClient.interceptors.response.use(
       const session = await refreshRequest;
       tokenStorage.set(session.accessToken, session.refreshToken);
       request.headers.Authorization = `Bearer ${session.accessToken}`;
+      if (requestUrl.includes('/auth/logout')) {
+        const payload = typeof request.data === 'string' ? JSON.parse(request.data) : request.data;
+        if (typeof payload !== 'object' || payload === null || Array.isArray(payload)) {
+          throw new Error('Unable to retry logout with the refreshed session.');
+        }
+        request.data = JSON.stringify({ ...payload, refreshToken: session.refreshToken });
+      }
       return await apiClient(request);
     } catch (refreshError) {
       tokenStorage.clear();
+      window.dispatchEvent(new Event('utsav:session-expired'));
       return Promise.reject(refreshError);
     }
   },

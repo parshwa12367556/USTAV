@@ -21,6 +21,9 @@ class User(BaseModel):
     vendor_profile = db.relationship(
         "VendorProfile", back_populates="user", uselist=False, cascade="all, delete-orphan"
     )
+    planner_profile = db.relationship(
+        "PlannerProfile", back_populates="user", uselist=False, cascade="all, delete-orphan"
+    )
 
     def to_dict(self) -> dict[str, object]:
         return {

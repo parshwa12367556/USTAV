@@ -9,6 +9,8 @@ from app.core.security import hash_password, verify_password
 from app.extensions import db
 from app.models.user import User
 from app.models.vendor import VendorProfile
+from app.models.vendor_staff import VendorMembership, VendorMembershipPermission
+from app.models.planner import PlannerProfile
 from app.models.workspace import (
     FamilyMembership,
     FamilyMembershipPermission,
@@ -17,6 +19,163 @@ from app.models.workspace import (
 from app.services.email_service import send_verification_code
 from app.services.workspace_service import WORKSPACE_PERMISSIONS, ensure_family_workspace
 from app.utils.helpers import generate_numeric_code
+
+VENDOR_OWNER_PERMISSIONS = {
+    "vendor.view",
+    "vendor.manage",
+    "booking.view",
+    "booking.manage",
+    "quotation.view",
+    "quotation.manage",
+    "service.manage",
+}
+
+
+def _family_membership_context(membership: FamilyMembership) -> dict[str, object]:
+    workspace = db.session.get(FamilyWorkspace, membership.workspace_id)
+    if membership.role == "owner":
+        permissions = sorted(WORKSPACE_PERMISSIONS)
+    else:
+        permissions = db.session.scalars(
+            db.select(FamilyMembershipPermission.permission)
+            .where(FamilyMembershipPermission.membership_id == membership.id)
+            .order_by(FamilyMembershipPermission.permission)
+        ).all()
+    return {
+        "id": membership.id,
+        "kind": "family",
+        "name": workspace.name if workspace else "Family workspace",
+        "workspace": {
+            "id": membership.workspace_id,
+            "name": workspace.name if workspace else "Family workspace",
+            "type": "family",
+            "membershipId": membership.id,
+            "role": membership.role,
+            "permissions": list(permissions),
+        },
+        "business": None,
+        "role": "wedding_planner" if membership.role == "planner" else (
+            "family_owner" if membership.role == "owner" else "family_member"
+        ),
+        "permissions": list(permissions),
+        "membershipId": membership.id,
+    }
+
+
+def _vendor_membership_context(membership: VendorMembership) -> dict[str, object]:
+    profile = db.session.get(VendorProfile, membership.vendor_id)
+    if membership.role == "owner":
+        permissions = sorted(VENDOR_OWNER_PERMISSIONS)
+    else:
+        permissions = db.session.scalars(
+            db.select(VendorMembershipPermission.permission)
+            .where(VendorMembershipPermission.membership_id == membership.id)
+            .order_by(VendorMembershipPermission.permission)
+        ).all()
+    business = {
+        "id": membership.vendor_id,
+        "name": profile.business_name if profile else "Vendor workspace",
+        "type": "vendor",
+        "category": profile.category if profile else None,
+        "verificationStatus": profile.verification_status if profile else None,
+    }
+    return {
+        "id": membership.id,
+        "kind": "vendor",
+        "name": business["name"],
+        "workspace": None,
+        "business": business,
+        "role": "vendor_owner" if membership.role == "owner" else "vendor_staff",
+        "permissions": list(permissions),
+        "membershipId": membership.id,
+    }
+
+
+def _user_memberships(user: User) -> list[dict[str, object]]:
+    if user.vendor_profile is not None:
+        owner_membership = db.session.scalar(
+            db.select(VendorMembership).where(
+                VendorMembership.vendor_id == user.vendor_profile.id,
+                VendorMembership.user_id == user.id,
+            )
+        )
+        if owner_membership is None:
+            db.session.add(
+                VendorMembership(
+                    vendor_id=user.vendor_profile.id,
+                    user_id=user.id,
+                    role="owner",
+                    status="active",
+                )
+            )
+            db.session.flush()
+    family_memberships = db.session.scalars(
+        db.select(FamilyMembership)
+        .where(
+            FamilyMembership.user_id == user.id,
+            FamilyMembership.status == "active",
+        )
+        .order_by(FamilyMembership.created_at)
+    ).all()
+    vendor_memberships = db.session.scalars(
+        db.select(VendorMembership)
+        .where(
+            VendorMembership.user_id == user.id,
+            VendorMembership.status == "active",
+        )
+        .order_by(VendorMembership.created_at)
+    ).all()
+    result = [
+        _family_membership_context(membership) for membership in family_memberships
+    ] + [_vendor_membership_context(membership) for membership in vendor_memberships]
+
+    planner_profile = db.session.scalar(
+        db.select(PlannerProfile).where(PlannerProfile.user_id == user.id)
+    )
+    if planner_profile is not None:
+        result.append({
+            "id": planner_profile.id,
+            "kind": "planner",
+            "name": planner_profile.company_name or f"{user.name}'s planner workspace",
+            "workspace": {
+                "id": planner_profile.id,
+                "name": planner_profile.company_name or f"{user.name}'s planner workspace",
+                "type": "planner",
+                "role": "planner",
+                "permissions": ["planner.view", "planner.manage"],
+            },
+            "business": None,
+            "role": "wedding_planner",
+            "permissions": ["planner.view", "planner.manage"],
+            "membershipId": planner_profile.id,
+        })
+    if user.role == "admin":
+        result.append({
+            "id": f"admin:{user.id}",
+            "kind": "admin",
+            "name": "Platform administration",
+            "workspace": None,
+            "business": None,
+            "role": "super_admin",
+            "permissions": ["admin.view", "admin.manage", "platform.manage"],
+            "membershipId": f"admin:{user.id}",
+        })
+    if user.role == "family" and not result:
+        has_membership = db.session.scalar(
+            db.select(FamilyMembership.id).where(FamilyMembership.user_id == user.id)
+        )
+        if has_membership is None:
+            workspace = ensure_family_workspace(user)
+            membership = db.session.scalar(
+                db.select(FamilyMembership).where(
+                    FamilyMembership.workspace_id == workspace.id,
+                    FamilyMembership.user_id == user.id,
+                    FamilyMembership.status == "active",
+                )
+            )
+            if membership is not None:
+                result.append(_family_membership_context(membership))
+    return result
 
 
 def _generate_verification_code() -> str:
@@ -52,7 +211,52 @@ def register_user(payload: dict[str, object]) -> tuple[User, str]:
     try:
         db.session.flush()
         if user.role == "family":
-            ensure_family_workspace(user)
+            workspace = FamilyWorkspace(
+                owner_user_id=user.id,
+                name=str(payload.get("workspaceName") or f"{user.name}'s Family").strip(),
+            )
+            db.session.add(workspace)
+            db.session.flush()
+            db.session.add(
+                FamilyMembership(
+                    workspace_id=workspace.id,
+                    user_id=user.id,
+                    role="owner",
+                    status="active",
+                )
+            )
+        elif user.role == "vendor":
+            business_name = payload.get("businessName")
+            category = payload.get("category")
+            city = payload.get("city")
+            if business_name and category and city:
+                profile = VendorProfile(
+                    user_id=user.id,
+                    business_name=str(business_name).strip(),
+                    category=str(category).strip(),
+                    city=str(city).strip(),
+                    address=str(payload.get("address") or "").strip() or None,
+                    description=str(payload.get("description") or "").strip() or None,
+                    verification_status="pending",
+                )
+                db.session.add(profile)
+                db.session.flush()
+                db.session.add(
+                    VendorMembership(
+                        vendor_id=profile.id,
+                        user_id=user.id,
+                        role="owner",
+                        status="active",
+                    )
+                )
+        elif user.role == "planner":
+            db.session.add(
+                PlannerProfile(
+                    user_id=user.id,
+                    company_name=str(payload.get("companyName") or "").strip() or None,
+                    years_experience=payload.get("yearsExperience"),
+                )
+            )
         send_verification_code(user.email, code)
         db.session.commit()
     except Exception:
@@ -88,89 +292,60 @@ def authenticate(email: str, password: str) -> User:
     return user
 
 
-def _serialize_active_workspace(user: User) -> dict[str, object] | None:
-    if user.role != "family":
-        return None
-    workspace = ensure_family_workspace(user)
-    membership = db.session.scalar(
-        db.select(FamilyMembership).where(
-            FamilyMembership.workspace_id == workspace.id,
-            FamilyMembership.user_id == user.id,
-            FamilyMembership.status == "active",
+def build_session_context(
+    user: User,
+    membership_id: str | None = None,
+    *,
+    strict_membership: bool = False,
+) -> dict[str, object]:
+    memberships = _user_memberships(user)
+    selected = None
+    if membership_id is not None:
+        selected = next(
+            (item for item in memberships if item["id"] == membership_id), None
         )
-    )
-    if membership is None:
-        permissions = sorted(WORKSPACE_PERMISSIONS)
-    elif membership.role == "owner":
-        permissions = sorted(WORKSPACE_PERMISSIONS)
+        if selected is None:
+            if strict_membership:
+                raise ApiError("The selected workspace is not available to this account.", 404)
+    elif memberships:
+        selected = memberships[0]
+    if selected is None:
+        active_role = user.role
+        active_workspace = None
+        active_business = None
+        permissions = []
+        selected_membership_id = None
     else:
-        permissions = db.session.scalars(
-            db.select(FamilyMembershipPermission.permission)
-            .where(FamilyMembershipPermission.membership_id == membership.id)
-            .order_by(FamilyMembershipPermission.permission)
-        ).all()
-    return {
-        "id": workspace.id,
-        "name": workspace.name,
-        "type": "family",
-        "membershipId": membership.id if membership else None,
-        "role": membership.role if membership else "owner",
-        "permissions": list(permissions),
-    }
-
-
-def _serialize_active_business(user: User) -> dict[str, object] | None:
-    profile = user.vendor_profile or db.session.scalar(
-        db.select(VendorProfile).where(VendorProfile.user_id == user.id)
-    )
-    if profile is None:
-        return None
-    return {
-        "id": profile.id,
-        "name": profile.business_name,
-        "type": "vendor",
-        "category": profile.category,
-        "verificationStatus": profile.verification_status,
-    }
-
-
-def build_session_context(user: User) -> dict[str, object]:
-    active_workspace = _serialize_active_workspace(user) if user.role == "family" else None
-    active_business = _serialize_active_business(user) if user.role == "vendor" else None
-    permissions: list[str] = []
-    active_role = user.role
-    membership_id = None
-    if active_workspace is not None:
-        permissions = list(active_workspace.get("permissions", []))
-        active_role = str(active_workspace.get("role") or user.role)
-        membership_id = active_workspace.get("membershipId")
-    elif active_business is not None:
-        permissions = [
-            "vendor.view",
-            "vendor.manage",
-            "booking.view",
-            "booking.manage",
-            "quotation.view",
-            "quotation.manage",
-            "service.manage",
-        ]
-    elif user.role == "admin":
-        permissions = ["admin.view", "admin.manage", "platform.manage"]
-
+        active_role = str(selected["role"])
+        active_workspace = selected["workspace"]
+        active_business = selected["business"]
+        permissions = list(selected["permissions"])
+        selected_membership_id = str(selected["membershipId"])
     return {
         "user": user.to_dict(),
         "activeRole": active_role,
         "activeWorkspace": active_workspace,
         "activeBusiness": active_business,
         "permissions": permissions,
-        "membershipId": membership_id,
+        "membershipId": selected_membership_id,
+        "memberships": memberships,
         "accountStatus": "active" if user.is_active else "suspended",
     }
 
 
-def create_session(user: User) -> dict[str, object]:
-    claims = {"role": user.role}
-    context = build_session_context(user)
+def create_session(
+    user: User,
+    membership_id: str | None = None,
+    *,
+    strict_membership: bool = False,
+) -> dict[str, object]:
+    context = build_session_context(
+        user, membership_id, strict_membership=strict_membership
+    )
+    claims = {
+        "role": user.role,
+        "membership_id": context["membershipId"],
+    }
     return {
         "accessToken": create_access_token(identity=user.id, additional_claims=claims),
         "refreshToken": create_refresh_token(identity=user.id, additional_claims=claims),

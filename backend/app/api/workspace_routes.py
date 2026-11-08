@@ -7,7 +7,9 @@ from flask_jwt_extended import get_jwt_identity, jwt_required
 from marshmallow import ValidationError
 
 from app.core.exceptions import ApiError
+from app.core.security import hash_password
 from app.extensions import db
+from app.models.planner import PlannerAssignment, PlannerProfile
 from app.models.user import User
 from app.models.workspace import (
     FamilyMembership,
@@ -59,6 +61,23 @@ def _membership_dict(membership: FamilyMembership) -> dict[str, object]:
         "status": membership.status,
         "permissions": permissions,
     }
+
+
+def _delete_unassigned_planner_profile(user_id: str) -> None:
+    user = db.session.get(User, user_id)
+    if user is None or user.role == "planner":
+        return
+    has_assignments = db.session.scalar(
+        db.select(PlannerAssignment.id)
+        .where(PlannerAssignment.planner_user_id == user_id)
+        .limit(1)
+    )
+    if has_assignments is None:
+        profile = db.session.scalar(
+            db.select(PlannerProfile).where(PlannerProfile.user_id == user_id)
+        )
+        if profile is not None:
+            db.session.delete(profile)
 
 
 @workspace_bp.get("/workspace/members")
@@ -128,7 +147,7 @@ def create_invitation():
 
 
 @workspace_bp.post("/workspace/invitations/accept")
-@jwt_required()
+@jwt_required(optional=True)
 def accept_invitation():
     payload = accept_schema.load(request.get_json(silent=True) or {})
     token_hash = sha256(payload["token"].encode("utf-8")).hexdigest()
@@ -138,8 +157,9 @@ def accept_invitation():
             FamilyWorkspaceInvitation.status == "pending",
         )
     )
-    user = db.session.get(User, get_jwt_identity())
-    if invitation is None or user is None or invitation.email != user.email.lower():
+    user_id = get_jwt_identity()
+    user = db.session.get(User, user_id) if user_id else None
+    if invitation is None:
         raise ApiError("Workspace invitation is invalid or unavailable.", 404)
     expires_at = invitation.expires_at
     if expires_at.tzinfo is None:
@@ -148,6 +168,30 @@ def accept_invitation():
         invitation.status = "expired"
         db.session.commit()
         raise ApiError("Workspace invitation has expired.", 410)
+    if user is None:
+        if not payload.get("name") or not payload.get("password"):
+            raise ApiError("Name and password are required to create an invited account.", 400)
+        if db.session.scalar(db.select(User.id).where(User.email == invitation.email)):
+            raise ApiError("Sign in to accept this invitation for your existing account.", 401)
+        user = User(
+            name=payload["name"].strip(),
+            email=invitation.email,
+            password_hash=hash_password(payload["password"]),
+            role="planner" if invitation.role == "planner" else "family",
+            is_active=True,
+            is_verified=True,
+        )
+        db.session.add(user)
+        db.session.flush()
+    if invitation.email.lower() != user.email.lower() or not user.is_verified:
+        raise ApiError("Workspace invitation is invalid or unavailable.", 404)
+    if db.session.scalar(
+        db.select(FamilyMembership.id).where(
+            FamilyMembership.workspace_id == invitation.workspace_id,
+            FamilyMembership.user_id == user.id,
+        )
+    ):
+        raise ApiError("This account already belongs to the workspace.", 409)
 
     membership = FamilyMembership(
         workspace_id=invitation.workspace_id,
@@ -157,6 +201,22 @@ def accept_invitation():
     )
     db.session.add(membership)
     db.session.flush()
+    if invitation.role == "planner":
+        planner_profile = db.session.scalar(
+            db.select(PlannerProfile).where(PlannerProfile.user_id == user.id)
+        )
+        if planner_profile is None:
+            planner_profile = PlannerProfile(user_id=user.id)
+            db.session.add(planner_profile)
+            db.session.flush()
+        db.session.add(
+            PlannerAssignment(
+                planner_user_id=user.id,
+                workspace_id=invitation.workspace_id,
+                membership_id=membership.id,
+                assigned_by_user_id=invitation.invited_by_user_id,
+            )
+        )
     permissions = db.session.scalars(
         db.select(FamilyWorkspaceInvitationPermission.permission).where(
             FamilyWorkspaceInvitationPermission.invitation_id == invitation.id
@@ -171,7 +231,12 @@ def accept_invitation():
         )
     invitation.status = "accepted"
     db.session.commit()
-    return {"membership": _membership_dict(membership)}
+    from app.services.auth_service import create_session
+
+    return {
+        "membership": _membership_dict(membership),
+        "session": create_session(user, membership.id, strict_membership=True),
+    }
 
 
 @workspace_bp.patch("/workspace/members/<membership_id>")
@@ -185,7 +250,37 @@ def update_member(membership_id: str):
     if not payload:
         raise ValidationError({"_schema": ["At least one field is required."]})
     if "role" in payload:
+        previous_role = membership.role
         membership.role = payload["role"]
+        if previous_role != membership.role:
+            assignment = db.session.scalar(
+                db.select(PlannerAssignment).where(
+                    PlannerAssignment.membership_id == membership.id
+                )
+            )
+            if membership.role == "planner" and assignment is None:
+                planner_profile = db.session.scalar(
+                    db.select(PlannerProfile).where(
+                        PlannerProfile.user_id == membership.user_id
+                    )
+                )
+                if planner_profile is None:
+                    planner_profile = PlannerProfile(user_id=membership.user_id)
+                    db.session.add(planner_profile)
+                    db.session.flush()
+                db.session.add(
+                    PlannerAssignment(
+                        planner_user_id=membership.user_id,
+                        workspace_id=membership.workspace_id,
+                        membership_id=membership.id,
+                        assigned_by_user_id=get_jwt_identity(),
+                    )
+                )
+            elif membership.role != "planner" and assignment is not None:
+                db.session.delete(assignment)
+            if membership.role != "planner":
+                db.session.flush()
+                _delete_unassigned_planner_profile(membership.user_id)
     if "permissions" in payload:
         permissions = _permissions(payload["permissions"])
         db.session.execute(
@@ -208,6 +303,9 @@ def remove_member(membership_id: str):
     membership = db.session.get(FamilyMembership, membership_id)
     if membership is None or membership.workspace_id != workspace.id or membership.role == "owner":
         raise ApiError("Workspace member not found.", 404)
+    user_id = membership.user_id
     db.session.delete(membership)
+    db.session.flush()
+    _delete_unassigned_planner_profile(user_id)
     db.session.commit()
     return "", 204

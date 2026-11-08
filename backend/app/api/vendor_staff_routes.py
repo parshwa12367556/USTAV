@@ -6,6 +6,7 @@ from flask import Blueprint, request
 from flask_jwt_extended import get_jwt_identity, jwt_required
 
 from app.core.exceptions import ApiError
+from app.core.security import hash_password
 from app.extensions import db
 from app.models.booking import Booking
 from app.models.user import User
@@ -106,7 +107,7 @@ def invite_vendor_staff():
 
 
 @vendor_staff_bp.post("/staff/invitations/accept")
-@jwt_required()
+@jwt_required(optional=True)
 def accept_vendor_staff_invitation():
     payload = accept_invitation_schema.load(request.get_json(silent=True) or {})
     token_hash = sha256(payload["token"].encode("utf-8")).hexdigest()
@@ -116,13 +117,9 @@ def accept_vendor_staff_invitation():
             VendorStaffInvitation.status == "pending",
         )
     )
-    user = db.session.get(User, get_jwt_identity())
-    if (
-        invitation is None
-        or user is None
-        or user.role != "vendor"
-        or user.email.lower() != invitation.email
-    ):
+    user_id = get_jwt_identity()
+    user = db.session.get(User, user_id) if user_id else None
+    if invitation is None:
         raise ApiError("Vendor staff invitation is invalid or unavailable.", 404)
     expires_at = invitation.expires_at
     if expires_at.tzinfo is None:
@@ -131,6 +128,30 @@ def accept_vendor_staff_invitation():
         invitation.status = "expired"
         db.session.commit()
         raise ApiError("Vendor staff invitation has expired.", 410)
+    if user is None:
+        if not payload.get("name") or not payload.get("password"):
+            raise ApiError("Name and password are required to create an invited account.", 400)
+        if db.session.scalar(db.select(User.id).where(User.email == invitation.email)):
+            raise ApiError("Sign in to accept this invitation for your existing account.", 401)
+        user = User(
+            name=payload["name"].strip(),
+            email=invitation.email,
+            password_hash=hash_password(payload["password"]),
+            role="vendor",
+            is_active=True,
+            is_verified=True,
+        )
+        db.session.add(user)
+        db.session.flush()
+    if not user.is_verified or user.email.lower() != invitation.email:
+        raise ApiError("Vendor staff invitation is invalid or unavailable.", 404)
+    if db.session.scalar(
+        db.select(VendorMembership.id).where(
+            VendorMembership.vendor_id == invitation.vendor_id,
+            VendorMembership.user_id == user.id,
+        )
+    ):
+        raise ApiError("This account already belongs to the vendor team.", 409)
 
     membership = VendorMembership(
         vendor_id=invitation.vendor_id,
@@ -148,7 +169,12 @@ def accept_vendor_staff_invitation():
     )
     invitation.status = "accepted"
     db.session.commit()
-    return {"membership": _staff_dict(membership)}
+    from app.services.auth_service import create_session
+
+    return {
+        "membership": _staff_dict(membership),
+        "session": create_session(user, membership.id, strict_membership=True),
+    }
 
 
 @vendor_staff_bp.delete("/profile/me/staff/<membership_id>")

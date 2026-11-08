@@ -116,7 +116,62 @@ def test_family_invitation_is_bound_to_email_and_owner(client, app, auth_headers
     assert accepted.json["membership"]["role"] == "planner"
 
 
-def test_family_member_cannot_manage_other_workspace_members(client, app, auth_headers):
+def test_planner_invitation_can_create_an_email_bound_account(
+    client, app, auth_headers, family_user
+):
+    invitation = client.post(
+        "/api/v1/workspace/invitations",
+        json={
+            "email": "new-planner@example.com",
+            "role": "planner",
+            "permissions": ["event.view", "event.create"],
+        },
+        headers=auth_headers,
+    )
+    assert invitation.status_code == 201
+    accepted = client.post(
+        "/api/v1/workspace/invitations/accept",
+        json={
+            "token": invitation.json["acceptanceToken"],
+            "name": "New Planner",
+            "password": "planner-password-123",
+        },
+    )
+    assert accepted.status_code == 200
+    assert accepted.json["session"]["activeRole"] == "wedding_planner"
+    assert accepted.json["session"]["user"]["role"] == "planner"
+    created_event = client.post(
+        "/api/v1/events",
+        json={"name": "Planner created", "type": "Wedding", "date": "2027-12-10"},
+        headers={"Authorization": f"Bearer {accepted.json['session']['accessToken']}"},
+    )
+    assert created_event.status_code == 201
+    with app.app_context():
+        from app.models.event import Event
+
+        assert db.session.get(Event, created_event.json["id"]).owner_id == family_user["id"]
+    with app.app_context():
+        from app.models.planner import PlannerAssignment, PlannerProfile
+
+        assert db.session.scalar(
+            db.select(PlannerProfile.id).where(
+                PlannerProfile.user_id == accepted.json["membership"]["userId"]
+            )
+        )
+        assert db.session.scalar(
+            db.select(PlannerAssignment.id).where(
+                PlannerAssignment.membership_id == accepted.json["membership"]["id"]
+            )
+        )
+
+    login = client.post(
+        "/api/v1/auth/login",
+        json={"email": "new-planner@example.com", "password": "planner-password-123"},
+    )
+    assert login.status_code == 200
+
+
+def test_family_member_cannot_manage_workspace_members(client, app, auth_headers):
     member = create_family_member(app, "limited@example.com")
     invitation = client.post(
         "/api/v1/workspace/invitations",
@@ -136,11 +191,10 @@ def test_family_member_cannot_manage_other_workspace_members(client, app, auth_h
         "/api/v1/workspace/members",
         headers={"Authorization": f"Bearer {member['token']}"},
     )
-    assert response.status_code == 200
-    assert all(item["userId"] == member["id"] for item in response.json)
+    assert response.status_code == 403
     forbidden = client.patch(
         f"/api/v1/workspace/members/{accepted.json['membership']['id']}",
         json={"permissions": ["event.view"]},
         headers={"Authorization": f"Bearer {member['token']}"},
     )
-    assert forbidden.status_code == 404
+    assert forbidden.status_code == 403

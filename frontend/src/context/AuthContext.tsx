@@ -2,7 +2,8 @@ import axios from 'axios';
 import { createContext, useCallback, useEffect, useMemo, useState, type PropsWithChildren } from 'react';
 import { authApi } from '../features/auth/api/authApi';
 import { tokenStorage } from '../services/storage/tokenStorage';
-import type { AuthSession, AuthUser, AuthWorkspace, AuthBusiness } from '../types/auth.types';
+import type { AuthSession, AuthUser, AuthWorkspace, AuthBusiness, AuthMembership } from '../types/auth.types';
+import { queryClient } from '../app/queryClient';
 
 type AuthContextValue = {
   user: AuthUser | null;
@@ -11,15 +12,37 @@ type AuthContextValue = {
   activeBusiness: AuthBusiness | null;
   permissions: string[];
   membershipId: string | null;
+  memberships: AuthMembership[];
   accountStatus: string | null;
   isAuthenticated: boolean;
   isLoading: boolean;
   setSession: (session: AuthSession) => void;
   updateProfile: (input: Partial<Pick<AuthUser, 'name' | 'phone'>>) => Promise<AuthUser>;
-  signOut: () => void;
+  signOut: () => Promise<void>;
 };
 
 export const AuthContext = createContext<AuthContextValue | null>(null);
+
+function clearPrivateBrowserData() {
+  try {
+    const privateKeys = ['utsav-events', 'utsav-planning-tasks'];
+    for (const key of Object.keys(window.localStorage)) {
+      if (privateKeys.includes(key) || key.startsWith('utsav-catalog:')) {
+        window.localStorage.removeItem(key);
+      }
+    }
+  } catch (error) {
+    console.error('Unable to clear saved private browser data.', error);
+  }
+
+  try {
+    for (const key of Object.keys(window.sessionStorage)) {
+      if (key.startsWith('utsav')) window.sessionStorage.removeItem(key);
+    }
+  } catch (error) {
+    console.error('Unable to clear private session storage.', error);
+  }
+}
 
 export function AuthProvider({ children }: PropsWithChildren) {
   const [user, setUser] = useState<AuthUser | null>(null);
@@ -28,8 +51,39 @@ export function AuthProvider({ children }: PropsWithChildren) {
   const [activeBusiness, setActiveBusiness] = useState<AuthBusiness | null>(null);
   const [permissions, setPermissions] = useState<string[]>([]);
   const [membershipId, setMembershipId] = useState<string | null>(null);
+  const [memberships, setMemberships] = useState<AuthMembership[]>([]);
   const [accountStatus, setAccountStatus] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(() => Boolean(tokenStorage.get()));
+
+  const clearSessionState = useCallback(() => {
+    queryClient.clear();
+    try {
+      tokenStorage.clear();
+    } catch (error) {
+      console.error('Unable to clear stored authentication tokens.', error);
+    }
+    clearPrivateBrowserData();
+    setUser(null);
+    setActiveRole(null);
+    setActiveWorkspace(null);
+    setActiveBusiness(null);
+    setPermissions([]);
+    setMembershipId(null);
+    setMemberships([]);
+    setAccountStatus(null);
+  }, []);
+
+  const signOut = useCallback(async () => {
+    let logoutError: unknown;
+    try {
+      if (tokenStorage.get()) await authApi.logout(tokenStorage.getRefresh());
+    } catch (error) {
+      logoutError = error;
+    } finally {
+      clearSessionState();
+    }
+    if (logoutError) throw logoutError;
+  }, [clearSessionState]);
 
   useEffect(() => {
     if (!tokenStorage.get()) {
@@ -46,12 +100,13 @@ export function AuthProvider({ children }: PropsWithChildren) {
         setActiveBusiness(profile.activeBusiness ?? null);
         setPermissions(profile.permissions ?? []);
         setMembershipId(profile.membershipId ?? null);
+        setMemberships(profile.memberships ?? []);
         setAccountStatus(profile.accountStatus ?? null);
       })
       .catch((error: unknown) => {
         if (!active) return;
         if (axios.isAxiosError(error) && error.response?.status === 401) {
-          tokenStorage.clear();
+          clearSessionState();
         } else {
           console.error('Unable to restore the saved session.', error);
         }
@@ -62,7 +117,13 @@ export function AuthProvider({ children }: PropsWithChildren) {
     return () => {
       active = false;
     };
-  }, []);
+  }, [clearSessionState]);
+
+  useEffect(() => {
+    const handleExpiredSession = () => clearSessionState();
+    window.addEventListener('utsav:session-expired', handleExpiredSession);
+    return () => window.removeEventListener('utsav:session-expired', handleExpiredSession);
+  }, [clearSessionState]);
 
   const setSession = useCallback((session: AuthSession) => {
     tokenStorage.set(session.accessToken, session.refreshToken);
@@ -72,6 +133,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
     setActiveBusiness(session.activeBusiness ?? null);
     setPermissions(session.permissions ?? []);
     setMembershipId(session.membershipId ?? null);
+    setMemberships(session.memberships ?? []);
     setAccountStatus(session.accountStatus ?? null);
   }, []);
 
@@ -79,17 +141,6 @@ export function AuthProvider({ children }: PropsWithChildren) {
     const profile = await authApi.updateProfile(input);
     setUser(profile);
     return profile;
-  }, []);
-
-  const signOut = useCallback(() => {
-    tokenStorage.clear();
-    setUser(null);
-    setActiveRole(null);
-    setActiveWorkspace(null);
-    setActiveBusiness(null);
-    setPermissions([]);
-    setMembershipId(null);
-    setAccountStatus(null);
   }, []);
 
   const value = useMemo(
@@ -100,6 +151,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
       activeBusiness,
       permissions,
       membershipId,
+      memberships,
       accountStatus,
       isAuthenticated: Boolean(user),
       isLoading,
@@ -107,7 +159,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
       updateProfile,
       signOut,
     }),
-    [user, activeRole, activeWorkspace, activeBusiness, permissions, membershipId, accountStatus, isLoading, setSession, updateProfile, signOut],
+    [user, activeRole, activeWorkspace, activeBusiness, permissions, membershipId, memberships, accountStatus, isLoading, setSession, updateProfile, signOut],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

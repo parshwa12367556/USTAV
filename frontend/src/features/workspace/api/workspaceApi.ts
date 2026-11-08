@@ -1,4 +1,5 @@
 import { apiClient } from '../../../services/api/apiClient';
+import type { AuthSession } from '../../../types/auth.types';
 
 export type WorkspaceMemberRole = 'owner' | 'member' | 'planner';
 
@@ -14,6 +15,7 @@ export type WorkspaceMember = {
 
 export type WorkspacePermission =
   | 'event.view'
+  | 'event.create'
   | 'event.update'
   | 'event.delete'
   | 'function.manage'
@@ -65,8 +67,14 @@ export const workspaceApi = {
     }>('/workspace/invitations', input);
     return response.data;
   },
-  async acceptInvitation(token: string): Promise<{ membership: WorkspaceMember }> {
-    const response = await apiClient.post<{ membership: WorkspaceMember }>('/workspace/invitations/accept', { token });
+  async acceptInvitation(
+    token: string,
+    account?: { name: string; password: string },
+  ): Promise<{ membership: WorkspaceMember; session: AuthSession }> {
+    const response = await apiClient.post<{ membership: WorkspaceMember; session: AuthSession }>(
+      '/workspace/invitations/accept',
+      { token, ...account },
+    );
     return response.data;
   },
   async updateMember(

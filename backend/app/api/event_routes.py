@@ -1,5 +1,5 @@
 from flask import Blueprint, request
-from flask_jwt_extended import get_jwt_identity, jwt_required
+from flask_jwt_extended import get_jwt, get_jwt_identity, jwt_required
 from marshmallow import ValidationError
 from sqlalchemy import and_, or_
 
@@ -58,11 +58,37 @@ def create_event():
     owner = db.session.get(User, get_jwt_identity())
     if owner is None:
         raise ApiError("Family owner account is unavailable.", 403)
-    workspace = ensure_family_workspace(owner)
+    membership_id = get_jwt().get("membership_id")
+    membership = db.session.get(FamilyMembership, membership_id) if membership_id else None
+    if membership is not None and membership.status == "active" and membership.role != "owner":
+        if db.session.scalar(
+            db.select(FamilyMembershipPermission.id).where(
+                FamilyMembershipPermission.membership_id == membership.id,
+                FamilyMembershipPermission.permission == "event.create",
+            )
+        ) is None:
+            raise ApiError("You do not have permission to create events in this workspace.", 403)
+        workspace = db.session.get(FamilyWorkspace, membership.workspace_id)
+        if workspace is None:
+            raise ApiError("Family workspace is unavailable.", 404)
+        event_owner_id = workspace.owner_user_id
+    else:
+        workspace = db.session.scalar(
+            db.select(FamilyWorkspace).where(FamilyWorkspace.owner_user_id == owner.id)
+        )
+        if workspace is None and owner.role == "family":
+            workspace = ensure_family_workspace(owner)
+        if workspace is None or (
+            membership is not None
+            and membership.role == "owner"
+            and membership.workspace_id != workspace.id
+        ):
+            raise ApiError("A family workspace membership is required to create events.", 403)
+        event_owner_id = workspace.owner_user_id
     if payload.get("endDate") and payload["endDate"] < payload["date"]:
         raise ValidationError({"endDate": ["End date cannot be before start date."]})
     event = Event(
-        owner_id=get_jwt_identity(),
+        owner_id=event_owner_id,
         name=payload["name"].strip(),
         event_type=payload["type"].strip(),
         date=payload["date"],
@@ -74,7 +100,6 @@ def create_event():
         status=payload.get("status", "planning"),
         description=payload.get("description"),
     )
-    db.session.add(workspace)
     db.session.add(event)
     db.session.commit()
     return event.to_dict(), 201

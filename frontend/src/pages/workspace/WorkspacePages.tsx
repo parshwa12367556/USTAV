@@ -1286,6 +1286,7 @@ function BudgetItemModal({
 
 const workspacePermissionOptions: { value: WorkspacePermission; label: string }[] = [
   { value: 'event.view', label: 'View events' },
+  { value: 'event.create', label: 'Create events' },
   { value: 'event.update', label: 'Edit events' },
   { value: 'event.delete', label: 'Delete events' },
   { value: 'function.manage', label: 'Manage event functions' },
@@ -1310,7 +1311,8 @@ const workspacePermissionOptions: { value: WorkspacePermission; label: string }[
 ];
 
 export function MembersPage() {
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, setSession } = useAuth();
+  const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const invitationToken = searchParams.get('token') ?? '';
   const [members, setMembers] = useState<WorkspaceMember[]>([]);
@@ -1370,8 +1372,11 @@ export function MembersPage() {
     setNotice('');
     try {
       const result = await workspaceApi.acceptInvitation(invitationToken);
-      setNotice(`You joined the workspace as ${result.membership.role}.`);
+      setSession(result.session);
       setSearchParams({});
+      navigate((result.session.memberships?.length ?? 0) > 1
+        ? '/choose-workspace'
+        : result.session.activeRole === 'wedding_planner' ? '/planner' : '/dashboard', { replace: true });
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Unable to accept this invitation.');
     } finally {
@@ -1410,7 +1415,7 @@ export function MembersPage() {
   };
 
   const shareUrl = inviteToken
-    ? `${window.location.origin}/members?token=${encodeURIComponent(inviteToken)}`
+    ? `${window.location.origin}/workspace/invitation?token=${encodeURIComponent(inviteToken)}`
     : '';
   const copyInviteLink = async () => {
     try {
@@ -1604,7 +1609,9 @@ export function AdminPage() {
 }
 
 export function VendorDashboardPage() {
-  const { user, isAuthenticated } = useAuth();
+  const { user, activeRole, isAuthenticated } = useAuth();
+  const isStaff = activeRole === 'vendor_staff';
+  const isVendorAccount = ['vendor', 'vendor_owner', 'vendor_staff'].includes(activeRole ?? user?.role ?? '');
   const navigate = useNavigate();
   const [profile, setProfile] = useState<Vendor | null>(null);
   const [requests, setRequests] = useState<Quotation[]>([]);
@@ -1613,11 +1620,18 @@ export function VendorDashboardPage() {
   const [error, setError] = useState('');
   const [updatingBookingId, setUpdatingBookingId] = useState('');
   useEffect(() => {
-    if (!isAuthenticated || user?.role !== 'vendor') {
+    if (!isAuthenticated || !isVendorAccount) {
       setLoading(false);
       return;
     }
     let active = true;
+    if (isStaff) {
+      bookingsApi.list()
+        .then((vendorBookings) => { if (active) setBookings(vendorBookings); })
+        .catch((cause: unknown) => { if (active) setError(cause instanceof Error ? cause.message : 'Unable to load assigned bookings.'); })
+        .finally(() => { if (active) setLoading(false); });
+      return () => { active = false; };
+    }
     const profileRequest = vendorsApi.getMyProfile().catch((cause: unknown) => {
       if (isAxiosError(cause) && cause.response?.status === 404) return null;
       throw cause;
@@ -1639,7 +1653,7 @@ export function VendorDashboardPage() {
     return () => {
       active = false;
     };
-  }, [isAuthenticated, user?.role]);
+  }, [isAuthenticated, isVendorAccount, isStaff, user?.role]);
   const newRequests = requests.filter((request) => request.status === 'draft');
   const updateVendorBooking = async (booking: Booking, status: Booking['status']) => {
     setUpdatingBookingId(booking.id);
@@ -1655,18 +1669,20 @@ export function VendorDashboardPage() {
   };
   return (
     <div className="screen-stack">
-      <section className="vendor-welcome"><div><span className="eyebrow">YOUR LITTLE CORNER OF UTSAV</span><h2>Welcome, {profile?.name ?? user?.name ?? 'vendor'} <span>✦</span></h2><p>{profile ? 'Here are the real enquiries and bookings connected to your profile.' : 'You are viewing bookings assigned to your vendor staff account.'}</p></div><div className="vendor-welcome-actions">{profile && <button className="button button--outline" onClick={() => navigate('/vendor/settings')}>Manage your profile</button>}<button className="button button--outline" onClick={() => navigate('/vendor/staff')}>{profile ? 'Manage staff' : 'Staff assignments'}</button></div></section>
+      <section className="vendor-welcome"><div><span className="eyebrow">YOUR LITTLE CORNER OF UTSAV</span><h2>Welcome, {profile?.name ?? user?.name ?? 'vendor'} <span>✦</span></h2><p>{isStaff ? 'Here are the bookings assigned to you.' : profile ? 'Here are the real enquiries and bookings connected to your profile.' : 'Set up your profile to start managing your services.'}</p></div><div className="vendor-welcome-actions">{profile && <button className="button button--outline" onClick={() => navigate('/vendor/settings')}>Manage your profile</button>}{isStaff && <button className="button button--outline" onClick={() => navigate('/vendor/staff')}>Assigned bookings</button>}</div></section>
       {error && <p className="form-error" role="alert">{error}</p>}
-      {!isAuthenticated || user?.role !== 'vendor' ? <p className="form-error" role="alert">Sign in with a vendor account to view your studio dashboard.</p> : loading && <p role="status">Loading your studio activity…</p>}
-      <section className="vendor-stats-grid"><article className="vendor-stat-card"><span>NEW ENQUIRIES</span><strong>{newRequests.length.toLocaleString('en-IN')}</strong><small>Waiting for a proposal</small><span className="vendor-stat-icon">✉</span></article><article className="vendor-stat-card"><span>PROPOSALS SENT</span><strong>{requests.filter((item) => item.status === 'sent').length.toLocaleString('en-IN')}</strong><small>Awaiting family response</small><span className="vendor-stat-icon">◉</span></article><article className="vendor-stat-card"><span>YOUR RATING</span><strong>{profile ? `${profile.rating.toFixed(1)} ★` : '—'}</strong><small>{profile ? `From ${profile.reviewCount} reviews` : 'Vendor profile rating'}</small><span className="vendor-stat-icon">✦</span></article><article className="vendor-stat-card"><span>BOOKINGS</span><strong>{bookings.length.toLocaleString('en-IN')}</strong><small>Linked to your profile</small><span className="vendor-stat-icon">⌂</span></article></section>
-      <section className="content-card vendor-requests-card"><div className="list-toolbar"><div><SectionHeading title="A few families would love to meet you" /><p className="section-description">A warm reply is often the beginning of something wonderful.</p></div><button className="button button--outline" onClick={() => navigate('/vendor/quotation-requests')}>View all enquiries <Icon name="chevron" size={14} /></button></div>
-        {!loading && isAuthenticated && user?.role === 'vendor' && <div className="vendor-request-list">{newRequests.map((request) => <article className="vendor-request-row" key={request.id}><span className="avatar avatar--request">{(request.eventName ?? request.title).split(/\s+/).slice(0, 2).map((part) => part[0] ?? '').join('').toUpperCase()}</span><div className="request-copy"><strong>{request.title}</strong><span>{request.eventName ?? `Event ${request.eventId}`}</span><small>{request.eventDate ? formatDate(request.eventDate) : 'Date not set'} <i>·</i> {request.guestCount ?? 0} guests</small></div><StatusPill status="Pending" /><button className="button button--primary" onClick={() => navigate('/vendor/quotation-requests')}>Prepare quotation →</button></article>)}</div>}
-        {!loading && isAuthenticated && user?.role === 'vendor' && !newRequests.length && <div className="empty-state"><strong>No new enquiries just yet.</strong><p>New quotation requests for your profile will appear here.</p></div>}
+      {!isAuthenticated || !isVendorAccount ? <p className="form-error" role="alert">Sign in with a vendor account to view your studio dashboard.</p> : loading && <p role="status">Loading your studio activity…</p>}
+      {isStaff
+        ? <section className="vendor-stats-grid"><article className="vendor-stat-card"><span>ASSIGNED BOOKINGS</span><strong>{bookings.length.toLocaleString('en-IN')}</strong><small>Available to your team</small><span className="vendor-stat-icon">⌂</span></article></section>
+        : <section className="vendor-stats-grid"><article className="vendor-stat-card"><span>NEW ENQUIRIES</span><strong>{newRequests.length.toLocaleString('en-IN')}</strong><small>Waiting for a proposal</small><span className="vendor-stat-icon">✉</span></article><article className="vendor-stat-card"><span>PROPOSALS SENT</span><strong>{requests.filter((item) => item.status === 'sent').length.toLocaleString('en-IN')}</strong><small>Awaiting family response</small><span className="vendor-stat-icon">◉</span></article><article className="vendor-stat-card"><span>YOUR RATING</span><strong>{profile ? `${profile.rating.toFixed(1)} ★` : '—'}</strong><small>{profile ? `From ${profile.reviewCount} reviews` : 'Vendor profile rating'}</small><span className="vendor-stat-icon">✦</span></article><article className="vendor-stat-card"><span>BOOKINGS</span><strong>{bookings.length.toLocaleString('en-IN')}</strong><small>Linked to your profile</small><span className="vendor-stat-icon">⌂</span></article></section>}
+      {!isStaff && <section className="content-card vendor-requests-card"><div className="list-toolbar"><div><SectionHeading title="A few families would love to meet you" /><p className="section-description">A warm reply is often the beginning of something wonderful.</p></div><button className="button button--outline" onClick={() => navigate('/vendor/quotation-requests')}>View all enquiries <Icon name="chevron" size={14} /></button></div>
+        {!loading && isAuthenticated && isVendorAccount && <div className="vendor-request-list">{newRequests.map((request) => <article className="vendor-request-row" key={request.id}><span className="avatar avatar--request">{(request.eventName ?? request.title).split(/\s+/).slice(0, 2).map((part) => part[0] ?? '').join('').toUpperCase()}</span><div className="request-copy"><strong>{request.title}</strong><span>{request.eventName ?? `Event ${request.eventId}`}</span><small>{request.eventDate ? formatDate(request.eventDate) : 'Date not set'} <i>·</i> {request.guestCount ?? 0} guests</small></div><StatusPill status="Pending" /><button className="button button--primary" onClick={() => navigate('/vendor/quotation-requests')}>Prepare quotation →</button></article>)}</div>}
+        {!loading && isAuthenticated && isVendorAccount && !newRequests.length && <div className="empty-state"><strong>No new enquiries just yet.</strong><p>New quotation requests for your profile will appear here.</p></div>}
         <button className="text-button vendor-request-more" onClick={() => navigate('/vendor/quotation-requests')}>See all your enquiries →</button>
-      </section>
+      </section>}
       <section className="content-card vendor-requests-card">
         <div className="list-toolbar"><div><SectionHeading title="Your bookings" /><p className="section-description">Review requests and keep booking statuses up to date.</p></div></div>
-        {!loading && isAuthenticated && user?.role === 'vendor' && bookings.length > 0 && (
+        {!loading && isAuthenticated && isVendorAccount && bookings.length > 0 && (
           <div className="vendor-booking-list">
             {bookings.map((booking) => {
               const managesBooking = profile?.id === booking.vendorId;
@@ -1694,7 +1710,7 @@ export function VendorDashboardPage() {
             })}
           </div>
         )}
-        {!loading && isAuthenticated && user?.role === 'vendor' && bookings.length === 0 && <div className="empty-state"><strong>No bookings yet.</strong><p>Bookings for your services will appear here.</p></div>}
+        {!loading && isAuthenticated && isVendorAccount && bookings.length === 0 && <div className="empty-state"><strong>No bookings yet.</strong><p>{isStaff ? 'Your team has not assigned any bookings to you.' : 'Bookings for your services will appear here.'}</p></div>}
       </section>
       <div className="tip-banner"><span>✦</span><p><strong>Your next great review starts with a reply.</strong> Families appreciate a quick note, even when a date isn’t available.</p></div>
     </div>
@@ -1702,7 +1718,9 @@ export function VendorDashboardPage() {
 }
 
 export function VendorStaffPage() {
-  const { user, isAuthenticated } = useAuth();
+  const { user, activeRole, isAuthenticated, setSession } = useAuth();
+  const isStaff = activeRole === 'vendor_staff';
+  const isVendorAccount = ['vendor', 'vendor_owner', 'vendor_staff'].includes(activeRole ?? user?.role ?? '');
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const token = searchParams.get('token') ?? '';
@@ -1717,42 +1735,43 @@ export function VendorStaffPage() {
   const [notice, setNotice] = useState('');
 
   const refresh = async () => {
-    const [members, vendorBookings] = await Promise.all([
-      vendorStaffApi.list(),
-      bookingsApi.list(),
-    ]);
-    setStaff(members);
+    const vendorBookings = await bookingsApi.list();
     setBookings(vendorBookings);
+    if (!isStaff) setStaff(await vendorStaffApi.list());
   };
 
   useEffect(() => {
-    if (!isAuthenticated || user?.role !== 'vendor' || token) {
+    if (!isAuthenticated || !isVendorAccount || token) {
       setLoading(false);
       return;
     }
     let active = true;
-    Promise.all([vendorStaffApi.list(), bookingsApi.list()])
-      .then(([members, vendorBookings]) => {
+    const load = isStaff
+      ? bookingsApi.list().then((vendorBookings) => {
+        if (active) setBookings(vendorBookings);
+      })
+      : Promise.all([vendorStaffApi.list(), bookingsApi.list()]).then(([members, vendorBookings]) => {
         if (active) {
           setStaff(members);
           setBookings(vendorBookings);
         }
-      })
+      });
+    load
       .catch((cause: unknown) => {
         if (active) setError(cause instanceof Error ? cause.message : 'Unable to load vendor staff.');
       })
       .finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
-  }, [isAuthenticated, token, user?.role]);
+  }, [isAuthenticated, token, isVendorAccount, isStaff, user?.role]);
 
   const acceptInvite = async () => {
     if (!token) return;
     setSaving(true);
     setError('');
     try {
-      await vendorStaffApi.accept(token);
-      setNotice('You joined the vendor team. Assigned bookings are available in your dashboard.');
-      navigate('/vendor');
+      const result = await vendorStaffApi.accept(token);
+      setSession(result.session);
+      navigate((result.session.memberships?.length ?? 0) > 1 ? '/choose-workspace' : '/vendor');
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Unable to accept this vendor staff invitation.');
     } finally {
@@ -1823,7 +1842,7 @@ export function VendorStaffPage() {
   };
 
   const inviteUrl = inviteToken
-    ? `${window.location.origin}/vendor/staff?token=${encodeURIComponent(inviteToken)}`
+    ? `${window.location.origin}/vendor/invitation?token=${encodeURIComponent(inviteToken)}`
     : '';
 
   return (
@@ -1831,7 +1850,17 @@ export function VendorStaffPage() {
       {token && <section className="content-card workspace-invite-accept"><div><h2>You’re invited to a vendor team.</h2><p>Accept while signed in with the invited vendor account.</p></div><button className="button button--primary" disabled={saving} onClick={() => void acceptInvite()}>{saving ? 'Accepting…' : 'Accept invitation'} <span>→</span></button></section>}
       {error && <p className="form-error" role="alert">{error}</p>}
       {notice && <p className="form-success" role="status">{notice}</p>}
-      {!token && <>
+      {!token && isStaff && <section className="content-card vendor-requests-card">
+        <div className="list-toolbar"><div><SectionHeading title="Bookings assigned to you" /><p className="section-description">You can see only bookings your vendor owner assigned to you.</p></div></div>
+        {loading && <p role="status">Loading assigned bookings…</p>}
+        {!loading && bookings.map((booking) => <article className="vendor-booking-row" key={booking.id}>
+          <div className="request-copy"><strong>{booking.serviceName}</strong><span>{formatDate(booking.eventDate)}</span><small>{booking.eventName ?? `Event ${booking.eventId}`}</small></div>
+          <StatusPill status={booking.status === 'requested' ? 'Pending' : booking.status === 'confirmed' ? 'Confirmed' : booking.status === 'completed' ? 'Completed' : 'Cancelled'} />
+          {booking.status === 'confirmed' && <button className="button button--primary" disabled={saving} onClick={() => void bookingsApi.updateStatus(booking.id, 'completed').then(refresh).catch((cause: unknown) => setError(cause instanceof Error ? cause.message : 'Unable to update this booking.'))}>Mark complete</button>}
+        </article>)}
+        {!loading && !bookings.length && <div className="empty-state"><strong>No bookings assigned yet.</strong><p>Assigned bookings will appear here.</p></div>}
+      </section>}
+      {!token && !isStaff && <>
         <section className="content-card vendor-requests-card">
           <div className="list-toolbar"><div><SectionHeading title="Your vendor team" /><p className="section-description">Invite staff without sharing owner credentials. Staff only see bookings assigned to them.</p></div></div>
           {loading && <p role="status">Loading your vendor team…</p>}
