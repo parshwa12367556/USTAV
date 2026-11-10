@@ -5,6 +5,8 @@ export type GuestInvitation = {
   guestName: string;
   event: { name: string; date: string; location?: string | null };
   status: RSVPResponse['status'] | 'pending';
+  plusOnes: number;
+  maxAttendees: number;
   functions: Array<{
     id: string;
     name: string;
@@ -20,7 +22,7 @@ export const rsvpApi = {
     await apiClient.post('/rsvp', payload);
   },
   async getByToken(token: string): Promise<GuestInvitation> {
-    const result = await apiClient.get<GuestInvitation>(`/rsvp/${encodeURIComponent(token)}`);
+    const result = await apiClient.post<GuestInvitation>('/rsvp/lookup', { token });
     return result.data;
   },
 };

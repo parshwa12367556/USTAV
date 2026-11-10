@@ -14,10 +14,11 @@ export type EventRecord = {
 
 export type GuestRecord = {
   id?: string;
-  invitationToken?: string;
   invitedFunctionIds?: string[];
   name: string;
   group: string;
   email: string;
+  phone?: string;
+  maxAttendees?: number;
   status: 'Confirmed' | 'Pending' | 'Declined' | 'Maybe';
 };

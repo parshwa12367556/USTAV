@@ -1,10 +1,10 @@
 from datetime import datetime, timedelta, timezone
-from uuid import uuid4
 
 from flask import current_app
 
 from app.extensions import db
 from app.models.base import BaseModel
+from app.utils.token_security import generate_bearer_token, hash_bearer_token
 
 
 class GuestGroup(BaseModel):
@@ -27,7 +27,14 @@ class Guest(BaseModel):
     phone = db.Column(db.String(20), nullable=True)
     rsvp_status = db.Column(db.String(20), nullable=False, default="pending")
     plus_ones = db.Column(db.Integer, nullable=False, default=0)
-    invitation_token = db.Column(db.String(48), unique=True, nullable=False, default=lambda: uuid4().hex)
+    max_attendees = db.Column(db.Integer, nullable=False, default=21)
+    invitation_token_hash = db.Column(
+        db.String(64),
+        unique=True,
+        nullable=False,
+        default=lambda: hash_bearer_token(generate_bearer_token()),
+    )
+    invitation_revoked_at = db.Column(db.DateTime(timezone=True), nullable=True)
     invitation_expires_at = db.Column(
         db.DateTime(timezone=True),
         nullable=False,
@@ -58,6 +65,7 @@ class Guest(BaseModel):
             "group": self.group.name if self.group else None,
             "rsvpStatus": self.rsvp_status,
             "plusOnes": self.plus_ones,
+            "maxAttendees": self.max_attendees,
             "invitationExpiresAt": self.invitation_expires_at.isoformat(),
             "invitedFunctionIds": invited_function_ids,
             "functionRsvps": [

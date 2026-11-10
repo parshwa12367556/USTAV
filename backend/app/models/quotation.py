@@ -10,7 +10,13 @@ class QuotationRequest(BaseModel):
     title = db.Column(db.String(180), nullable=False)
     status = db.Column(db.String(20), nullable=False, default="draft", index=True)
     valid_until = db.Column(db.Date, nullable=True)
-    items = db.relationship("QuotationLineItem", back_populates="quotation", cascade="all, delete-orphan")
+    revision = db.Column(db.Integer, nullable=False, default=1)
+    previous_quotation_id = db.Column(db.String(36), db.ForeignKey("quotations.id", name="fk_quotation_previous"), nullable=True)
+    revised_by = db.Column(db.String(36), nullable=True)
+    revised_at = db.Column(db.DateTime(timezone=True), nullable=True)
+    requires_fresh_approval = db.Column(db.Boolean, nullable=False, default=False)
+    items_snapshot = db.Column(db.JSON, nullable=False, default=dict)
+    total_amount = db.Column(db.Numeric(12, 2), nullable=False, default=0)
 
 
 class QuotationLineItem(BaseModel):

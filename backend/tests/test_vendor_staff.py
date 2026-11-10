@@ -8,6 +8,7 @@ from werkzeug.security import generate_password_hash
 from app.extensions import db
 from app.models.booking import Booking
 from app.models.event import Event
+from app.models.guest import Guest
 from app.models.user import User
 from app.models.vendor import VendorProfile
 from app.models.vendor_staff import VendorMembership
@@ -58,6 +59,8 @@ def test_vendor_staff_invitation_assignment_and_booking_scope(client, app):
         )
         db.session.add(event)
         db.session.flush()
+        guest = Guest(event_id=event.id, name="Private family guest")
+        db.session.add(guest)
         booking = Booking(
             event_id=event.id,
             vendor_id=vendor.id,
@@ -69,10 +72,19 @@ def test_vendor_staff_invitation_assignment_and_booking_scope(client, app):
         db.session.add(booking)
         db.session.commit()
         booking_id = booking.id
+        event_id = event.id
         vendor_id = vendor.id
 
     owner_headers = {"Authorization": f"Bearer {owner_token}"}
     staff_headers = {"Authorization": f"Bearer {staff_token}"}
+    assert client.get(
+        f"/api/v1/events/{event_id}/guests",
+        headers=owner_headers,
+    ).status_code == 404
+    assert client.get(
+        f"/api/v1/events/{event_id}/guests",
+        headers=staff_headers,
+    ).status_code == 404
     invitation = client.post(
         "/api/v1/vendors/profile/me/staff/invitations",
         json={"email": "staff@vendor.test"},

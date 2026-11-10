@@ -4,9 +4,10 @@ import os
 from pathlib import Path
 from datetime import datetime, timezone
 from typing import Any
+from uuid import uuid4
 
 from cryptography.fernet import Fernet
-from flask import Flask, jsonify, request
+from flask import Flask, g, jsonify, request
 from sqlalchemy import event, text
 from sqlalchemy.exc import SQLAlchemyError
 from werkzeug.middleware.proxy_fix import ProxyFix
@@ -149,7 +150,8 @@ def create_app(config_name: str | None = None, overrides: dict[str, Any] | None 
             or not user.is_active
             or not user.is_verified
             or jwt_payload.get("role") != user.role
-            or jwt_payload.get("security_version", user.security_version) != user.security_version
+            # Pre-versioned tokens must not inherit a later account security version.
+            or jwt_payload.get("security_version", 0) != user.security_version
             or db.session.get(RevokedToken, jwt_payload.get("jti")) is not None
         )
         session_id = jwt_payload.get("sid")
@@ -204,12 +206,23 @@ def create_app(config_name: str | None = None, overrides: dict[str, Any] | None 
     app.register_blueprint(api_v1, url_prefix="/api/v1")
     register_error_handlers(app)
 
+    @app.before_request
+    def assign_request_id():
+        g.request_id = uuid4().hex
+
     @app.after_request
     def security_headers(response):
+        response.headers.setdefault("X-Request-ID", g.request_id)
         response.headers.setdefault("X-Content-Type-Options", "nosniff")
         response.headers.setdefault("X-Frame-Options", "DENY")
         response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
         response.headers.setdefault("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
+        if request.path.startswith("/api/v1/rsvp/") or request.path == "/api/v1/rsvp":
+            response.headers["Cache-Control"] = "no-store"
+            response.headers["Referrer-Policy"] = "no-referrer"
+        elif request.path == "/api/v1/invitations/public/lookup":
+            response.headers["Cache-Control"] = "no-store"
+            response.headers["Referrer-Policy"] = "no-referrer"
         if app.config["APP_ENVIRONMENT"] == "production":
             response.headers.setdefault(
                 "Strict-Transport-Security", "max-age=31536000; includeSubDomains"

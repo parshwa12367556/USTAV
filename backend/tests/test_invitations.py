@@ -1,5 +1,6 @@
 from app.extensions import db
 from app.models.invitation import InvitationTemplate
+from app.models.invitation import UserInvitation
 
 
 def test_published_invitation_can_be_viewed_publicly(client, auth_headers, app):
@@ -27,19 +28,35 @@ def test_published_invitation_can_be_viewed_publicly(client, auth_headers, app):
     )
     assert created.status_code == 201
     assert created.json["shareToken"]
+    assert "shareTokenHash" not in created.json
+    with app.app_context():
+        invitation_record = db.session.get(UserInvitation, created.json["id"])
+        assert invitation_record.share_token_hash
+        assert invitation_record.share_token_hash != created.json["shareToken"]
+        assert not hasattr(invitation_record, "share_token")
 
-    public = client.get(f"/api/v1/invitations/public/{created.json['shareToken']}")
+    public = client.post(
+        "/api/v1/invitations/public/lookup",
+        json={"token": created.json["shareToken"]},
+    )
     assert public.status_code == 200
     assert public.json["title"] == "Aarav and Meera"
     assert public.json["event"]["name"] == "Garden Wedding"
+    assert public.headers["Cache-Control"] == "no-store"
 
+    listed = client.get("/api/v1/invitations", headers=auth_headers)
+    assert "shareToken" not in listed.json[0]
+    assert "share_token_hash" not in listed.json[0]
     unpublished = client.patch(
         f"/api/v1/invitations/{created.json['id']}",
         json={"status": "draft"},
         headers=auth_headers,
     )
     assert unpublished.status_code == 200
-    assert client.get(f"/api/v1/invitations/public/{created.json['shareToken']}").status_code == 404
+    assert client.post(
+        "/api/v1/invitations/public/lookup",
+        json={"token": created.json["shareToken"]},
+    ).status_code == 404
     republished = client.patch(
         f"/api/v1/invitations/{created.json['id']}",
         json={"status": "published"},
@@ -47,9 +64,20 @@ def test_published_invitation_can_be_viewed_publicly(client, auth_headers, app):
     )
     assert republished.status_code == 200
     assert republished.json["shareToken"] != created.json["shareToken"]
-    assert client.get(
-        f"/api/v1/invitations/public/{republished.json['shareToken']}"
+    assert client.post(
+        "/api/v1/invitations/public/lookup",
+        json={"token": republished.json["shareToken"]},
     ).status_code == 200
+
+    revoked = client.post(
+        f"/api/v1/invitations/{created.json['id']}/revoke",
+        headers=auth_headers,
+    )
+    assert revoked.status_code == 200
+    assert client.post(
+        "/api/v1/invitations/public/lookup",
+        json={"token": republished.json["shareToken"]},
+    ).status_code == 404
 
 
 def test_invitation_creation_rejects_another_users_event(client, auth_headers):
@@ -62,5 +90,8 @@ def test_invitation_creation_rejects_another_users_event(client, auth_headers):
 
 
 def test_unpublished_invitation_is_not_public(client):
-    response = client.get("/api/v1/invitations/public/nonexistent-token")
+    response = client.post(
+        "/api/v1/invitations/public/lookup",
+        json={"token": "nonexistent-token-123456789012345"},
+    )
     assert response.status_code == 404

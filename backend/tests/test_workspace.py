@@ -4,6 +4,7 @@ from flask_jwt_extended import create_access_token
 from werkzeug.security import generate_password_hash
 
 from app.extensions import db
+from app.models.invitation import InvitationTemplate
 from app.models.user import User
 
 
@@ -84,12 +85,16 @@ def test_family_workspace_invitation_enforces_scoped_permissions(
     )
     assert member_guests.status_code == 200
     assert all("invitationToken" not in guest for guest in member_guests.json)
-    assert client.get(
+    assert client.post(
         f"/api/v1/guests/{guest_id}/invitation-token",
         headers=member_headers,
     ).status_code == 404
-    owner_token = client.get(
-        f"/api/v1/guests/{guest_id}/invitation-token",
+    assert client.post(
+        f"/api/v1/guests/{guest_id}/invitation-token/rotate",
+        headers=member_headers,
+    ).status_code == 404
+    owner_token = client.post(
+        f"/api/v1/guests/{guest_id}/invitation-token/rotate",
         headers=auth_headers,
     )
     assert owner_token.status_code == 200
@@ -260,6 +265,9 @@ def test_active_family_workspace_scopes_events_guests_and_planner_access(
         },
     )
     assert family_b_login.status_code == 200
+    family_b_owner_headers = {
+        "Authorization": f"Bearer {family_b_login.json['accessToken']}"
+    }
 
     event_a = client.post(
         "/api/v1/events",
@@ -287,13 +295,37 @@ def test_active_family_workspace_scopes_events_guests_and_planner_access(
         },
     )
     assert guest_a.status_code == guest_b.status_code == 201
+    with app.app_context():
+        template = InvitationTemplate(name="Workspace invitation", category="Wedding")
+        db.session.add(template)
+        db.session.commit()
+        template_id = template.id
+    invitation_a = client.post(
+        "/api/v1/invitations",
+        json={
+            "eventId": event_a.json["id"],
+            "templateId": template_id,
+            "title": "Family A invitation",
+        },
+        headers=auth_headers,
+    )
+    invitation_b = client.post(
+        "/api/v1/invitations",
+        json={
+            "eventId": event_b.json["id"],
+            "templateId": template_id,
+            "title": "Family B invitation",
+        },
+        headers=family_b_owner_headers,
+    )
+    assert invitation_a.status_code == invitation_b.status_code == 201
 
     family_invitation = client.post(
         "/api/v1/workspace/invitations",
         json={
             "email": family_registration["email"],
             "role": "member",
-            "permissions": ["event.view", "guest.view"],
+            "permissions": ["event.view", "guest.view", "invitation.view"],
         },
         headers=auth_headers,
     )
@@ -317,6 +349,38 @@ def test_active_family_workspace_scopes_events_guests_and_planner_access(
     assert client.get(
         f"/api/v1/events/{event_b.json['id']}/guests",
         headers=family_a_headers,
+    ).status_code == 404
+    assert client.get(
+        f"/api/v1/events/{event_a.json['id']}/guests",
+        headers=family_a_headers,
+    ).json[0]["id"] == guest_a.json["id"]
+    assert client.get(
+        f"/api/v1/guests/{guest_b.json['id']}/functions",
+        headers=family_a_headers,
+    ).status_code == 404
+    assert client.patch(
+        f"/api/v1/guests/{guest_b.json['id']}",
+        json={"name": "Unauthorized"},
+        headers=family_a_headers,
+    ).status_code == 404
+    assert client.delete(
+        f"/api/v1/guests/{guest_b.json['id']}",
+        headers=family_a_headers,
+    ).status_code == 404
+    assert client.post(
+        f"/api/v1/guests/{guest_b.json['id']}/invitation-token/rotate",
+        headers=family_a_headers,
+    ).status_code == 404
+    assert client.get(
+        f"/api/v1/events/{event_b.json['id']}/guests/export.csv",
+        headers=family_a_headers,
+    ).status_code == 404
+    visible_invitations = client.get("/api/v1/invitations", headers=family_a_headers)
+    assert [item["id"] for item in visible_invitations.json] == [invitation_a.json["id"]]
+    assert client.patch(
+        f"/api/v1/invitations/{invitation_b.json['id']}",
+        json={"title": "Unauthorized"},
+        headers=auth_headers,
     ).status_code == 404
     dashboard = client.get("/api/v1/dashboard", headers=family_a_headers)
     assert dashboard.status_code == 200
@@ -398,6 +462,10 @@ def test_active_family_workspace_scopes_events_guests_and_planner_access(
     assert [item["id"] for item in planner_events.json] == [event_a.json["id"]]
     assert client.get(
         f"/api/v1/events/{event_b.json['id']}", headers=planner_headers
+    ).status_code == 404
+    assert client.get(
+        f"/api/v1/events/{event_a.json['id']}/guests",
+        headers=planner_headers,
     ).status_code == 404
 
 

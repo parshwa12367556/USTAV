@@ -18,6 +18,19 @@ export type UserInvitation = {
   shareToken?: string;
 };
 
+export type PublicInvitation = {
+  title: string;
+  design: Record<string, unknown>;
+  event: {
+    name: string;
+    type: string;
+    date: string;
+    venue: string | null;
+    location: string | null;
+    functions: Array<{ name: string; date: string; venue: string | null }>;
+  };
+};
+
 export const invitationsApi = {
   async listTemplates(): Promise<InvitationTemplate[]> {
     const response = await apiClient.get<InvitationTemplate[]>('/invitations/templates');
@@ -36,6 +49,10 @@ export const invitationsApi = {
       `/invitations/${encodeURIComponent(id)}`,
       input,
     );
+    return response.data;
+  },
+  async getPublicByToken(token: string): Promise<PublicInvitation> {
+    const response = await apiClient.post<PublicInvitation>('/invitations/public/lookup', { token });
     return response.data;
   },
 };

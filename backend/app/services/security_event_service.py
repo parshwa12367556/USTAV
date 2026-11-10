@@ -1,4 +1,4 @@
-from flask import request
+from flask import g, request
 
 from app.extensions import db
 from app.models.security_event import SecurityEvent
@@ -22,6 +22,6 @@ def record_security_event(
             resource_id=resource_id,
             ip_address=request.remote_addr,
             user_agent=(request.user_agent.string or "")[:512] or None,
-            metadata_json=metadata or {},
+            metadata_json={**(metadata or {}), "request_id": getattr(g, "request_id", None)},
         )
     )

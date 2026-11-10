@@ -1,7 +1,8 @@
+import csv
+from io import StringIO
 from datetime import datetime, timedelta, timezone
-from secrets import token_urlsafe
 
-from flask import Blueprint, current_app, request
+from flask import Blueprint, Response, current_app, request
 from flask_jwt_extended import get_jwt, get_jwt_identity, jwt_required
 from marshmallow import Schema, ValidationError, fields, validate
 from werkzeug.datastructures import FileStorage
@@ -10,9 +11,12 @@ from app.core.exceptions import ApiError
 from app.extensions import db
 from app.models.event import Event, Function
 from app.models.guest import Guest, GuestFunctionMapping, GuestGroup
-from app.schemas.guest_schema import GuestGroupSchema, GuestSchema
+from app.schemas.guest_schema import GuestGroupSchema, GuestSchema, normalize_phone
+from app.models.workspace import FamilyWorkspace, FamilyMembership
+from app.services.security_event_service import record_security_event
 from app.services.workspace_service import require_event_permission
 from app.utils.csv_parser import parse_guest_csv
+from app.utils.token_security import generate_bearer_token, hash_bearer_token
 
 guest_bp = Blueprint("guests", __name__)
 guest_schema = GuestSchema()
@@ -37,6 +41,12 @@ def _owned_event(event_id: str, permission: str = "guest.view") -> Event:
     )
 
 
+def _workspace_id(event: Event) -> str | None:
+    return db.session.scalar(
+        db.select(FamilyWorkspace.id).where(FamilyWorkspace.owner_user_id == event.owner_id)
+    )
+
+
 @guest_bp.get("/events/<event_id>/guests")
 @jwt_required()
 def list_guests(event_id: str):
@@ -47,11 +57,56 @@ def list_guests(event_id: str):
     return [guest.to_dict() for guest in guests]
 
 
+@guest_bp.get("/events/<event_id>/guests/export.csv")
+@jwt_required()
+def export_guests(event_id: str):
+    event = _owned_event(event_id, "guest.view")
+    membership = db.session.scalar(
+        db.select(FamilyMembership).where(
+            FamilyMembership.workspace_id == event.owner_id,
+            FamilyMembership.user_id == get_jwt_identity(),
+        )
+    )
+    is_owner = membership and membership.role == "family_owner"
+    guests = db.session.scalars(
+        db.select(Guest).where(Guest.event_id == event.id).order_by(Guest.name)
+    ).all()
+    output = StringIO(newline="")
+    writer = csv.writer(output)
+    writer.writerow(["Name", "Group", "Email", "Phone", "RSVP"])
+    writer.writerows(
+        [
+            guest.name,
+            guest.group.name if guest.group else "",
+            guest.email if is_owner else "",
+            guest.phone if is_owner else "",
+            guest.rsvp_status,
+        ]
+        for guest in guests
+    )
+    record_security_event(
+        "guest.exported",
+        "succeeded",
+        user_id=get_jwt_identity(),
+        resource_type="event",
+        resource_id=event.id,
+        metadata={"workspace_id": _workspace_id(event), "exported_count": len(guests)},
+    )
+    db.session.commit()
+    return Response(
+        "\ufeff" + output.getvalue(),
+        mimetype="text/csv",
+        headers={"Content-Disposition": 'attachment; filename="utsav-guest-list.csv"'},
+    )
+
+
 @guest_bp.post("/events/<event_id>/guests")
 @jwt_required()
 def create_guest(event_id: str):
     event = _owned_event(event_id, "guest.create")
     payload = guest_schema.load(request.get_json(silent=True) or {})
+    if payload.get("plusOnes", 0) + 1 > payload.get("maxAttendees", 21):
+        raise ValidationError({"plusOnes": ["The attendee count exceeds this invitation's limit."]})
     group = None
     group_name = payload.get("group")
     if group_name:
@@ -69,11 +124,21 @@ def create_guest(event_id: str):
         event_id=event.id,
         group_id=group.id if group else None,
         name=payload["name"].strip(),
-        email=payload.get("email"),
-        phone=payload.get("phone"),
+        phone=normalize_phone(payload.get("phone")),
+        email=(payload.get("email") or "").strip() or None,
+        max_attendees=payload.get("maxAttendees", 21),
         plus_ones=payload.get("plusOnes", 0),
     )
     db.session.add(guest)
+    db.session.flush()
+    record_security_event(
+        "guest.created",
+        "succeeded",
+        user_id=get_jwt_identity(),
+        resource_type="guest",
+        resource_id=guest.id,
+        metadata={"workspace_id": _workspace_id(event), "event_id": event.id},
+    )
     db.session.commit()
     return guest.to_dict(), 201
 
@@ -173,17 +238,29 @@ def import_guests(event_id: str):
         rows = parse_guest_csv(uploaded.stream.read().decode("utf-8-sig"))
     except (UnicodeDecodeError, ValueError) as error:
         raise ApiError(str(error)) from error
+    validated_rows = [guest_schema.load(row) for row in rows]
+    if any(row.get("plusOnes", 0) + 1 > row.get("maxAttendees", 21) for row in validated_rows):
+        raise ValidationError({"guests": ["An imported attendee count exceeds its invitation limit."]})
     guests = [
         Guest(
             event_id=event.id,
-            name=row["name"],
-            email=row.get("email"),
-            phone=row.get("phone"),
-            plus_ones=0,
+            name=row["name"].strip(),
+            email=(row.get("email") or "").strip() or None,
+            phone=normalize_phone(row.get("phone")),
+            max_attendees=row.get("maxAttendees", 21),
+            plus_ones=row.get("plusOnes", 0),
         )
-        for row in rows
+        for row in validated_rows
     ]
     db.session.add_all(guests)
+    record_security_event(
+        "guest.imported",
+        "succeeded",
+        user_id=get_jwt_identity(),
+        resource_type="event",
+        resource_id=event.id,
+        metadata={"workspace_id": _workspace_id(event), "imported_count": len(guests)},
+    )
     db.session.commit()
     return {"imported": len(guests), "guests": [guest.to_dict() for guest in guests]}, 201
 
@@ -213,8 +290,24 @@ def update_guest(guest_id: str):
             guest.group_id = group.id if group else None
         elif key == "plusOnes":
             guest.plus_ones = value
+        elif key == "maxAttendees":
+            if guest.rsvp_status == "attending" and guest.plus_ones + 1 > value:
+                raise ValidationError({"maxAttendees": ["The limit cannot be lower than the current RSVP count."]})
+            guest.max_attendees = value
+        elif key == "phone":
+            guest.phone = normalize_phone(value)
+        elif key == "email":
+            guest.email = value.strip() or None
         else:
             setattr(guest, key, value.strip() if isinstance(value, str) else value)
+    record_security_event(
+        "guest.updated",
+        "succeeded",
+        user_id=get_jwt_identity(),
+        resource_type="guest",
+        resource_id=guest.id,
+        metadata={"workspace_id": _workspace_id(guest.event), "event_id": guest.event_id},
+    )
     db.session.commit()
     return guest.to_dict()
 
@@ -263,6 +356,14 @@ def update_guest_functions(guest_id: str):
         GuestFunctionMapping(guest_id=guest.id, function_id=function.id)
         for function in functions
     )
+    record_security_event(
+        "guest.functions_updated",
+        "succeeded",
+        user_id=get_jwt_identity(),
+        resource_type="guest",
+        resource_id=guest.id,
+        metadata={"workspace_id": _workspace_id(guest.event), "event_id": guest.event_id},
+    )
     db.session.commit()
     return {"functionIds": [function.id for function in functions]}
 
@@ -275,6 +376,14 @@ def delete_guest(guest_id: str):
         raise ApiError("Guest not found.", 404)
     require_event_permission(
         get_jwt_identity(), guest.event, "guest.delete", get_jwt().get("membership_id")
+    )
+    record_security_event(
+        "guest.deleted",
+        "succeeded",
+        user_id=get_jwt_identity(),
+        resource_type="guest",
+        resource_id=guest.id,
+        metadata={"workspace_id": _workspace_id(guest.event), "event_id": guest.event_id},
     )
     db.session.delete(guest)
     db.session.commit()
@@ -290,29 +399,52 @@ def rotate_guest_invitation_token(guest_id: str):
     require_event_permission(
         get_jwt_identity(), guest.event, "guest.update", get_jwt().get("membership_id")
     )
-    guest.invitation_token = token_urlsafe(24)
+    token = generate_bearer_token()
+    guest.invitation_token_hash = hash_bearer_token(token)
+    # Preserve revocation state - if previously revoked, remain revoked
+    was_revoked = guest.invitation_revoked_at is not None
+    if was_revoked:
+        guest.invitation_revoked_at = datetime.now(timezone.utc)
+    else:
+        guest.invitation_revoked_at = None
     guest.invitation_expires_at = datetime.now(timezone.utc) + timedelta(
         days=current_app.config["INVITATION_TOKEN_EXPIRY_DAYS"]
+    )
+    record_security_event(
+        "guest.invitation_token_rotated",
+        "succeeded",
+        user_id=get_jwt_identity(),
+        resource_type="guest",
+        resource_id=guest.id,
+        metadata={"workspace_id": _workspace_id(guest.event), "event_id": guest.event_id},
     )
     db.session.commit()
     return {
         "guestId": guest.id,
-        "invitationToken": guest.invitation_token,
+        "invitationToken": token,
         "expiresAt": guest.invitation_expires_at.isoformat(),
     }
 
 
-@guest_bp.get("/guests/<guest_id>/invitation-token")
+@guest_bp.post("/guests/<guest_id>/invitation-token/revoke")
 @jwt_required()
-def get_guest_invitation_token(guest_id: str):
+def revoke_guest_invitation_token(guest_id: str):
     guest = db.session.get(Guest, guest_id)
     if guest is None:
         raise ApiError("Guest not found.", 404)
     require_event_permission(
         get_jwt_identity(), guest.event, "guest.update", get_jwt().get("membership_id")
     )
-    return {
-        "guestId": guest.id,
-        "invitationToken": guest.invitation_token,
-        "expiresAt": guest.invitation_expires_at.isoformat(),
-    }
+    now = datetime.now(timezone.utc)
+    guest.invitation_revoked_at = now
+    guest.invitation_expires_at = now
+    record_security_event(
+        "guest.invitation_revoked",
+        "succeeded",
+        user_id=get_jwt_identity(),
+        resource_type="guest",
+        resource_id=guest.id,
+        metadata={"workspace_id": _workspace_id(guest.event), "event_id": guest.event_id},
+    )
+    db.session.commit()
+    return {"guestId": guest.id, "revoked": True}

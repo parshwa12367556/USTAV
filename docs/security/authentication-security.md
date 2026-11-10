@@ -15,6 +15,7 @@ This page documents current backend behavior. Keep it synchronized with `backend
 - Passwords are stored as password hashes through Werkzeug’s hashing utilities, not plaintext.
 - New passwords require at least 12 characters, letters and digits, and must not contain account-name/email terms.
 - Access JWT expiry defaults to 900 seconds; refresh expiry defaults to seven days. Configure `JWT_ACCESS_TOKEN_SECONDS` and `JWT_REFRESH_TOKEN_SECONDS`.
+- Tokens issued by the current session service carry the user's `security_version`. Legacy tokens without that claim are treated as version `0`, so password resets or other security-version changes invalidate them instead of inheriting the updated version.
 - Access token is held in frontend memory. Refresh token is delivered as an HttpOnly cookie; the session table stores a refresh-token hash, current JTI, device metadata, timestamps, and revocation state.
 - Refresh rotates token/JTI and checks the CSRF cookie/header. Reuse/mismatch revokes the associated session.
 - Logout revokes server-side session/token state, clears cookies, and frontend logout clears auth state and query cache.

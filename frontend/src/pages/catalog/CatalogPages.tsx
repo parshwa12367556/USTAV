@@ -597,7 +597,7 @@ export function CatalogWorkspacePage() {
         });
         setModalOpen(false);
         setNotice(invitation.shareToken
-          ? `Invitation published. Share ${window.location.origin}/invite/${invitation.shareToken}`
+          ? `Invitation published. Share ${window.location.origin}/invitation/${invitation.shareToken}`
           : 'Invitation saved.');
       } catch (cause) {
         setRemoteError(cause instanceof Error ? cause.message : 'Unable to save your invitation.');

@@ -5,7 +5,20 @@ from app.models.guest import Guest
 from app.models.rsvp import RSVP
 
 
-def test_guest_can_submit_public_rsvp(client, auth_headers):
+def issue_guest_link(client, auth_headers, guest_id):
+    response = client.post(
+        f"/api/v1/guests/{guest_id}/invitation-token/rotate",
+        headers=auth_headers,
+    )
+    assert response.status_code == 200
+    return response.json["invitationToken"]
+
+
+def load_guest_invitation(client, token):
+    return client.post("/api/v1/rsvp/lookup", json={"token": token})
+
+
+def test_guest_can_submit_public_rsvp(client, auth_headers, app):
     event_response = client.post(
         "/api/v1/events",
         json={"name": "RSVP Wedding", "type": "Wedding", "date": "2027-05-01"},
@@ -18,16 +31,20 @@ def test_guest_can_submit_public_rsvp(client, auth_headers):
         headers=auth_headers,
     )
     assert "invitationToken" not in guest_response.json
-    invitation_link = client.get(
-        f"/api/v1/guests/{guest_response.json['id']}/invitation-token",
-        headers=auth_headers,
-    )
-    assert invitation_link.status_code == 200
-    token = invitation_link.json["invitationToken"]
+    token = issue_guest_link(client, auth_headers, guest_response.json["id"])
 
-    invitation = client.get(f"/api/v1/rsvp/{token}")
+    invitation = load_guest_invitation(client, token)
     assert invitation.status_code == 200
     assert invitation.json["guestName"] == "Guest Example"
+    assert "email" not in invitation.json
+    assert "phone" not in invitation.json
+    assert "invitation_token_hash" not in invitation.json
+    assert invitation.headers["Cache-Control"] == "no-store"
+    with app.app_context():
+        guest = db.session.get(Guest, guest_response.json["id"])
+        assert guest.invitation_token_hash != token
+        assert len(guest.invitation_token_hash) == 64
+        assert not hasattr(guest, "invitation_token")
 
     result = client.post(
         "/api/v1/rsvp",
@@ -42,8 +59,8 @@ def test_guest_can_submit_public_rsvp(client, auth_headers):
 
 def test_invalid_public_rsvp_token_is_rejected(client):
     response = client.post(
-        "/api/v1/rsvp",
-        json={"invitationToken": "invalid-token-123456", "status": "attending"},
+        "/api/v1/rsvp/lookup",
+        json={"token": "invalid-token-12345678901234567890"},
     )
     assert response.status_code == 404
 
@@ -60,25 +77,32 @@ def test_guest_invitation_token_expires_and_can_be_revoked(client, auth_headers,
         headers=auth_headers,
     ).json
     assert "invitationToken" not in guest
-    old_token = client.get(
-        f"/api/v1/guests/{guest['id']}/invitation-token",
-        headers=auth_headers,
-    ).json["invitationToken"]
+    old_token = issue_guest_link(client, auth_headers, guest["id"])
     rotated = client.post(
         f"/api/v1/guests/{guest['id']}/invitation-token/rotate",
         headers=auth_headers,
     )
     assert rotated.status_code == 200
     assert rotated.json["invitationToken"] != old_token
-    assert client.get(f"/api/v1/rsvp/{old_token}").status_code == 404
-    assert client.get(f"/api/v1/rsvp/{rotated.json['invitationToken']}").status_code == 200
+    assert load_guest_invitation(client, old_token).status_code == 404
+    assert load_guest_invitation(client, rotated.json["invitationToken"]).status_code == 200
+
+    revoked = client.post(
+        f"/api/v1/guests/{guest['id']}/invitation-token/revoke",
+        headers=auth_headers,
+    )
+    assert revoked.status_code == 200
+    assert load_guest_invitation(client, rotated.json["invitationToken"]).status_code == 410
+    regenerated = issue_guest_link(client, auth_headers, guest["id"])
+    assert load_guest_invitation(client, rotated.json["invitationToken"]).status_code == 404
+    assert load_guest_invitation(client, regenerated).status_code == 200
 
     with app.app_context():
         record = db.session.get(Guest, guest["id"])
         record.invitation_expires_at = datetime.now(timezone.utc) - timedelta(seconds=1)
         db.session.commit()
-    expired_token = rotated.json["invitationToken"]
-    assert client.get(f"/api/v1/rsvp/{expired_token}").status_code == 410
+    expired_token = regenerated
+    assert load_guest_invitation(client, expired_token).status_code == 410
     assert client.post(
         "/api/v1/rsvp",
         json={"invitationToken": expired_token, "status": "attending"},
@@ -96,18 +120,48 @@ def test_guest_can_respond_maybe(client, auth_headers):
         json={"name": "Maybe Guest"},
         headers=auth_headers,
     ).json
-    token = client.get(
-        f"/api/v1/guests/{guest['id']}/invitation-token",
-        headers=auth_headers,
-    ).json["invitationToken"]
+    token = issue_guest_link(client, auth_headers, guest["id"])
     response = client.post(
         "/api/v1/rsvp",
         json={"invitationToken": token, "status": "maybe"},
     )
     assert response.status_code == 200
-    assert client.get(
-        f"/api/v1/rsvp/{token}"
-    ).json["status"] == "maybe"
+    assert load_guest_invitation(client, token).json["status"] == "maybe"
+
+
+def test_rsvp_enforces_invited_attendee_limit(client, auth_headers):
+    event = client.post(
+        "/api/v1/events",
+        json={"name": "Limited Wedding", "type": "Wedding", "date": "2027-05-01"},
+        headers=auth_headers,
+    ).json
+    guest = client.post(
+        f"/api/v1/events/{event['id']}/guests",
+        json={"name": "Limited Guest", "maxAttendees": 2},
+        headers=auth_headers,
+    ).json
+    token = issue_guest_link(client, auth_headers, guest["id"])
+    accepted = client.post(
+        "/api/v1/rsvp",
+        json={"invitationToken": token, "status": "attending", "plusOnes": 1},
+    )
+    assert accepted.status_code == 200
+    rejected = client.post(
+        "/api/v1/rsvp",
+        json={"invitationToken": token, "status": "attending", "plusOnes": 2},
+    )
+    assert rejected.status_code == 400
+
+
+def test_public_rsvp_invalid_token_limit_returns_retry_metadata(client, app):
+    app.config["PUBLIC_RSVP_INVALID_LIMIT"] = "2 per minute"
+    app.config["PUBLIC_RSVP_LOOKUP_LIMIT"] = "20 per minute"
+    payload = {"token": "invalid-token-12345678901234567890"}
+    assert client.post("/api/v1/rsvp/lookup", json=payload).status_code == 404
+    assert client.post("/api/v1/rsvp/lookup", json=payload).status_code == 404
+    limited = client.post("/api/v1/rsvp/lookup", json=payload)
+    assert limited.status_code == 429
+    assert "Retry-After" in limited.headers
 
 
 def test_guest_can_be_assigned_functions_and_rsvp_per_function(client, auth_headers, app):
@@ -131,10 +185,7 @@ def test_guest_can_be_assigned_functions_and_rsvp_per_function(client, auth_head
         json={"name": "Function Guest"},
         headers=auth_headers,
     ).json
-    invitation_token = client.get(
-        f"/api/v1/guests/{guest['id']}/invitation-token",
-        headers=auth_headers,
-    ).json["invitationToken"]
+    invitation_token = issue_guest_link(client, auth_headers, guest["id"])
 
     assigned = client.put(
         f"/api/v1/guests/{guest['id']}/functions",
@@ -144,7 +195,7 @@ def test_guest_can_be_assigned_functions_and_rsvp_per_function(client, auth_head
     assert assigned.status_code == 200
     assert set(assigned.json["functionIds"]) == {haldi["id"], wedding["id"]}
 
-    invitation = client.get(f"/api/v1/rsvp/{invitation_token}")
+    invitation = load_guest_invitation(client, invitation_token)
     assert invitation.status_code == 200
     assert {item["id"] for item in invitation.json["functions"]} == {haldi["id"], wedding["id"]}
 
@@ -164,7 +215,7 @@ def test_guest_can_be_assigned_functions_and_rsvp_per_function(client, auth_head
         ).all()
         assert [(item.function_id, item.status) for item in responses] == [(haldi["id"], "attending")]
 
-    updated_invitation = client.get(f"/api/v1/rsvp/{invitation_token}")
+    updated_invitation = load_guest_invitation(client, invitation_token)
     statuses = {item["id"]: item["status"] for item in updated_invitation.json["functions"]}
     assert statuses == {haldi["id"]: "attending", wedding["id"]: "pending"}
 
@@ -190,10 +241,7 @@ def test_guest_cannot_rsvp_to_unassigned_or_other_event_function(client, auth_he
         json={"name": "Function Guest"},
         headers=auth_headers,
     ).json
-    invitation_token = client.get(
-        f"/api/v1/guests/{guest['id']}/invitation-token",
-        headers=auth_headers,
-    ).json["invitationToken"]
+    invitation_token = issue_guest_link(client, auth_headers, guest["id"])
 
     response = client.post(
         "/api/v1/rsvp",

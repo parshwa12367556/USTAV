@@ -20,5 +20,5 @@ class UserInvitation(BaseModel):
     title = db.Column(db.String(180), nullable=False)
     status = db.Column(db.String(20), nullable=False, default="draft")
     design = db.Column(db.JSON, nullable=False, default=dict)
-    share_token = db.Column(db.String(48), unique=True, nullable=True)
+    share_token_hash = db.Column(db.String(64), unique=True, nullable=True)
     share_expires_at = db.Column(db.DateTime(timezone=True), nullable=True)

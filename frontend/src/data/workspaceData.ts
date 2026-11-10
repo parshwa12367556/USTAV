@@ -42,14 +42,7 @@ export const initialEvents: EventRecord[] = [
   },
 ];
 
-export const guests: GuestRecord[] = [
-  { name: 'Ananya Sharma', group: 'Bride’s family', email: 'ananya.s@email.com', status: 'Confirmed' },
-  { name: 'Rohan Mehta', group: 'Groom’s family', email: 'rohan.m@email.com', status: 'Confirmed' },
-  { name: 'Kavya Iyer', group: 'Friends', email: 'kavya.iyer@email.com', status: 'Pending' },
-  { name: 'Arjun Kapoor', group: 'Friends', email: 'arjun.k@email.com', status: 'Confirmed' },
-  { name: 'Priya Nair', group: 'Bride’s family', email: 'priya.n@email.com', status: 'Pending' },
-  { name: 'Ishaan Verma', group: 'Colleagues', email: 'ishaan.v@email.com', status: 'Declined' },
-];
+export const guests: GuestRecord[] = [];
 
 export const vendors = [
   { name: 'The Marigold House', category: 'Wedding venues', location: 'Jaipur, Rajasthan', rating: '4.9', price: '₹2,40,000', icon: '✳', tone: 'rose' },

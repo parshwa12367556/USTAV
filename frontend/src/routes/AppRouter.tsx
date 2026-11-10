@@ -17,6 +17,7 @@ const EventsPage = lazy(() => import('../pages/workspace/WorkspacePages').then((
 const EventFunctionsPage = lazy(() => import('../pages/workspace/WorkspacePages').then((module) => ({ default: module.EventFunctionsPage })));
 const AdminPage = lazy(() => import('../pages/workspace/WorkspacePages').then((module) => ({ default: module.AdminPage })));
 const GuestInvitationPage = lazy(() => import('../pages/workspace/WorkspacePages').then((module) => ({ default: module.GuestInvitationPage })));
+const PublicDigitalInvitationPage = lazy(() => import('../pages/workspace/WorkspacePages').then((module) => ({ default: module.PublicDigitalInvitationPage })));
 const GuestsPage = lazy(() => import('../pages/workspace/WorkspacePages').then((module) => ({ default: module.GuestsPage })));
 const GuestGroupsPage = lazy(() => import('../pages/workspace/WorkspacePages').then((module) => ({ default: module.GuestGroupsPage })));
 const InvitationsPage = lazy(() => import('../pages/workspace/WorkspacePages').then((module) => ({ default: module.InvitationsPage })));
@@ -47,6 +48,7 @@ export function AppRouter() {
         <Route path="/privacy" element={<LegalPage />} />
         <Route path="/terms" element={<LegalPage />} />
         <Route path="/invite/:token" element={<GuestInvitationPage />} />
+        <Route path="/invitation/:token" element={<PublicDigitalInvitationPage />} />
         <Route path="/workspace/invitation" element={<InvitationAcceptancePage />} />
         <Route path="/vendor/invitation" element={<InvitationAcceptancePage />} />
         <Route path="/rsvp-confirmation" element={<CatalogWorkspacePage />} />

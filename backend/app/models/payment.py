@@ -11,6 +11,12 @@ class Payment(BaseModel):
     currency = db.Column(db.String(3), nullable=False, default="INR")
     status = db.Column(db.String(20), nullable=False, default="pending", index=True)
     paid_at = db.Column(db.DateTime(timezone=True), nullable=True)
+    # Refund fields
+    refund_amount = db.Column(db.Numeric(12, 2), nullable=False, default=0)
+    refund_status = db.Column(db.String(20), nullable=False, default="pending")
+    refund_provider_reference = db.Column(db.String(120), nullable=True)
+    refund_initiated_by = db.Column(db.String(36), nullable=True)
+    refund_timestamp = db.Column(db.DateTime(timezone=True), nullable=True)
 
     def to_dict(self) -> dict[str, object]:
         return {
@@ -29,7 +35,9 @@ class Transaction(BaseModel):
 
     payment_id = db.Column(db.String(36), db.ForeignKey("payments.id", ondelete="CASCADE"), nullable=False, index=True)
     provider = db.Column(db.String(40), nullable=False)
-    provider_reference = db.Column(db.String(120), unique=True, nullable=True)
+    provider_reference = db.Column(db.String(120), nullable=True)
+    provider_event_id = db.Column(db.String(120), nullable=True, index=True)
+    __table_args__ = (db.UniqueConstraint("provider", "provider_event_id", name="uq_provider_event_id"),)
     status = db.Column(db.String(30), nullable=False)
     response_data = db.Column(db.JSON, nullable=False, default=dict)
 

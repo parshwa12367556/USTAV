@@ -563,6 +563,42 @@ def test_password_reset_revokes_existing_sessions(client, family_user, monkeypat
     ).status_code == 200
 
 
+def test_password_reset_revokes_legacy_token_without_security_version(
+    client, family_user, monkeypatch
+):
+    from flask_jwt_extended import create_access_token
+
+    codes = []
+    monkeypatch.setattr(
+        "app.services.auth_service.send_verification_code",
+        lambda email, code: codes.append(code),
+    )
+    legacy_token = create_access_token(
+        identity=family_user["id"],
+        additional_claims={"role": "family"},
+    )
+    assert client.get(
+        "/api/v1/auth/me", headers={"Authorization": f"Bearer {legacy_token}"}
+    ).status_code == 200
+
+    assert client.post(
+        "/api/v1/auth/password-reset/request",
+        json={"email": family_user["email"]},
+    ).status_code == 200
+    reset = client.post(
+        "/api/v1/auth/password-reset",
+        json={
+            "email": family_user["email"],
+            "code": codes[0],
+            "newPassword": "different-secure-password-987",
+        },
+    )
+    assert reset.status_code == 200
+    assert client.get(
+        "/api/v1/auth/me", headers={"Authorization": f"Bearer {legacy_token}"}
+    ).status_code == 401
+
+
 def test_otp_attempt_limit_and_resend_cooldown(client, app, monkeypatch):
     codes = []
     monkeypatch.setattr(

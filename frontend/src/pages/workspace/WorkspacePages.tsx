@@ -615,6 +615,7 @@ export function GuestsPage() {
   const [selectedFunctionIds, setSelectedFunctionIds] = useState<string[]>([]);
   const [savingFunctionAssignment, setSavingFunctionAssignment] = useState(false);
   const [functionAssignmentError, setFunctionAssignmentError] = useState('');
+  const [invitationActionGuestId, setInvitationActionGuestId] = useState<string | null>(null);
   const activeEvent = events[0];
 
   useEffect(() => {
@@ -671,8 +672,10 @@ export function GuestsPage() {
     if (!activeEvent) throw new Error('Create an event before adding guests.');
     const saved = await guestsApi.create(activeEvent.id, {
       name: guest.name,
-      email: guest.email,
+      email: guest.email || undefined,
+      phone: guest.phone || undefined,
       group: guest.group,
+      maxAttendees: guest.maxAttendees,
     });
     setGuestList((current) => [toGuestRecord(saved), ...current]);
     setGuestModalOpen(false);
@@ -682,7 +685,9 @@ export function GuestsPage() {
     const saved = await guestsApi.update(guest.id, {
       name: guest.name,
       email: guest.email || undefined,
+      phone: guest.phone || undefined,
       group: guest.group || undefined,
+      maxAttendees: guest.maxAttendees,
     });
     setGuestList((current) => current.map((item) => item.id === saved.id ? toGuestRecord(saved) : item));
     setEditingGuest(null);
@@ -700,19 +705,36 @@ export function GuestsPage() {
       setGuestError(cause instanceof Error ? cause.message : 'Unable to remove this guest.');
     }
   };
-  const shareGuestInvitation = async (guest: GuestRecord, renew = false) => {
+  const shareGuestInvitation = async (guest: GuestRecord) => {
     if (!guest.id) return;
     setGuestError('');
     setGuestNotice('');
+    setInvitationActionGuestId(guest.id);
     try {
-      const result = renew
-        ? await guestsApi.rotateInvitationToken(guest.id)
-        : await guestsApi.getInvitationToken(guest.id);
+      const result = await guestsApi.rotateInvitationToken(guest.id);
       const token = result.invitationToken;
       await navigator.clipboard.writeText(`${window.location.origin}/invite/${encodeURIComponent(token)}`);
-      setGuestNotice(`${renew ? 'A new invitation link was created and copied' : 'Invitation link copied'} for ${guest.name}.`);
+      setGuestNotice(`A new link was created and copied for ${guest.name}. Any previous link is now invalid.`);
     } catch (cause) {
-      setGuestError(cause instanceof Error ? cause.message : 'Unable to copy the invitation link.');
+      setGuestError(cause instanceof Error
+        ? cause.message
+        : 'Unable to copy the invitation link. If a link was generated, the previous link is no longer valid.');
+    } finally {
+      setInvitationActionGuestId(null);
+    }
+  };
+  const revokeGuestInvitation = async (guest: GuestRecord) => {
+    if (!guest.id) return;
+    setGuestError('');
+    setGuestNotice('');
+    setInvitationActionGuestId(guest.id);
+    try {
+      await guestsApi.revokeInvitationToken(guest.id);
+      setGuestNotice(`The invitation link for ${guest.name} has been revoked.`);
+    } catch (cause) {
+      setGuestError(cause instanceof Error ? cause.message : 'Unable to revoke this invitation link.');
+    } finally {
+      setInvitationActionGuestId(null);
     }
   };
   const openFunctionAssignment = (guest: GuestRecord) => {
@@ -761,18 +783,20 @@ export function GuestsPage() {
   );
   const confirmed = guestList.filter((guest) => guest.status === 'Confirmed').length;
   const pending = guestList.filter((guest) => guest.status === 'Pending').length;
-  const exportGuestList = () => {
-    const escapeCell = (value: string) => `"${value.replaceAll('"', '""')}"`;
-    const csv = [
-      ['Name', 'Group', 'Email', 'RSVP'].map(escapeCell).join(','),
-      ...guestList.map((guest) => [guest.name, guest.group, guest.email, guest.status].map(escapeCell).join(',')),
-    ].join('\r\n');
-    const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = 'utsav-guest-list.csv';
-    link.click();
-    URL.revokeObjectURL(url);
+  const exportGuestList = async () => {
+    if (!isAuthenticated || !activeEvent) return;
+    setGuestError('');
+    try {
+      const csv = await guestsApi.exportCsv(activeEvent.id);
+      const url = URL.createObjectURL(csv);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = 'utsav-guest-list.csv';
+      link.click();
+      URL.revokeObjectURL(url);
+    } catch (cause) {
+      setGuestError(cause instanceof Error ? cause.message : 'Unable to export your guest list.');
+    }
   };
   return (
     <div className="screen-stack">
@@ -788,10 +812,10 @@ export function GuestsPage() {
         {guestLoading && <p role="status">Loading your guest list…</p>}
         {isAuthenticated && !activeEvent && <p role="status">Create an event before managing its guest list.</p>}
         <div className="list-toolbar"><div><SectionHeading title="The people who make it special" /><p className="section-description">A warm welcome begins with knowing who’s coming.</p></div><button className="button button--primary" disabled={isAuthenticated && !activeEvent} onClick={() => { setEditingGuest(null); setGuestModalOpen(true); }}><Icon name="plus" size={16} />Add a guest</button></div>
-        <div className="guest-tools"><div className="inline-search"><Icon name="search" size={17} /><input placeholder="Find someone by name or email" value={query} onChange={(event) => setQuery(event.target.value)} /></div><div className="filter-tabs">{['Everyone', 'Confirmed', 'Maybe', 'Pending', 'Declined'].map((item) => <button key={item} className={status === item ? 'filter-tab filter-tab--active' : 'filter-tab'} onClick={() => setStatus(item)}>{item}</button>)}</div>{isAuthenticated && <label className="button button--outline">↑ <span>{importingGuests ? 'Importing…' : 'Import CSV'}</span><input type="file" accept=".csv,text/csv" disabled={importingGuests || !activeEvent} onChange={(event) => { void importGuests(event.currentTarget.files?.[0]); event.currentTarget.value = ''; }} hidden /></label>}<button className="button button--outline" onClick={exportGuestList}>↓ <span>Export list</span></button></div>
+        <div className="guest-tools"><div className="inline-search"><Icon name="search" size={17} /><input placeholder="Find someone by name or email" value={query} onChange={(event) => setQuery(event.target.value)} /></div><div className="filter-tabs">{['Everyone', 'Confirmed', 'Maybe', 'Pending', 'Declined'].map((item) => <button key={item} className={status === item ? 'filter-tab filter-tab--active' : 'filter-tab'} onClick={() => setStatus(item)}>{item}</button>)}</div>{isAuthenticated && <label className="button button--outline">↑ <span>{importingGuests ? 'Importing…' : 'Import CSV'}</span><input type="file" accept=".csv,text/csv" disabled={importingGuests || !activeEvent} onChange={(event) => { void importGuests(event.currentTarget.files?.[0]); event.currentTarget.value = ''; }} hidden /></label>}<button className="button button--outline" disabled={!isAuthenticated || !activeEvent} onClick={() => void exportGuestList()}>↓ <span>Export list</span></button></div>
         <div className="guest-table">
           <div className="guest-table-row guest-table-header"><span>GUEST</span><span>GROUP</span><span>EMAIL ADDRESS</span><span>RSVP</span><span /></div>
-          {results.map((guest, index) => <div className="guest-table-row" key={guest.id ?? guest.email ?? guest.name}><div className="guest-name"><span className={`avatar avatar--guest avatar--guest-${index % 4}`}>{guest.name.split(' ').map((part) => part[0]).slice(0, 2).join('')}</span><strong>{guest.name}</strong></div><span className="table-secondary">{guest.group}</span><span className="table-secondary">{guest.email}</span><StatusPill status={guest.status} /><div className="guest-row-actions">{guest.id && <><button className="plain-icon" aria-label={`Edit ${guest.name}`} onClick={() => { setEditingGuest(guest); setGuestModalOpen(true); }}>Edit</button>{eventFunctions.length > 0 && <button className="plain-icon" aria-label={`Assign event functions to ${guest.name}`} onClick={() => openFunctionAssignment(guest)}>Functions</button>}{permissions.includes('guest.update') && <><button className="plain-icon" aria-label={`Copy invitation link for ${guest.name}`} onClick={() => void shareGuestInvitation(guest)}>Link</button><button className="plain-icon" aria-label={`Renew invitation link for ${guest.name}`} onClick={() => void shareGuestInvitation(guest, true)}>Renew</button></>}<button className="plain-icon" aria-label={`Remove ${guest.name}`} onClick={() => void removeGuest(guest)}>×</button></>}</div></div>)}
+          {results.map((guest, index) => <div className="guest-table-row" key={guest.id ?? guest.email ?? guest.name}><div className="guest-name"><span className={`avatar avatar--guest avatar--guest-${index % 4}`}>{guest.name.split(' ').map((part) => part[0]).slice(0, 2).join('')}</span><strong>{guest.name}</strong></div><span className="table-secondary">{guest.group}</span><span className="table-secondary">{guest.email}</span><StatusPill status={guest.status} /><div className="guest-row-actions">{guest.id && <><button className="plain-icon" aria-label={`Edit ${guest.name}`} onClick={() => { setEditingGuest(guest); setGuestModalOpen(true); }}>Edit</button>{eventFunctions.length > 0 && <button className="plain-icon" aria-label={`Assign event functions to ${guest.name}`} onClick={() => openFunctionAssignment(guest)}>Functions</button>}{permissions.includes('guest.update') && <><button className="plain-icon" aria-label={`Create and copy invitation link for ${guest.name}`} disabled={invitationActionGuestId === guest.id} onClick={() => void shareGuestInvitation(guest)}>{invitationActionGuestId === guest.id ? 'Working…' : 'Create link'}</button><button className="plain-icon" aria-label={`Revoke invitation link for ${guest.name}`} disabled={invitationActionGuestId === guest.id} onClick={() => void revokeGuestInvitation(guest)}>Revoke</button></>}<button className="plain-icon" aria-label={`Remove ${guest.name}`} onClick={() => void removeGuest(guest)}>×</button></>}</div></div>)}
           {!results.length && <div className="empty-state"><strong>No guests found</strong><p>Try a different name or RSVP filter.</p></div>}
         </div>
         <div className="table-footer"><span>Showing {results.length} {results.length === 1 ? 'guest' : 'guests'}</span><span>RSVP details update as your loved ones reply.</span></div>
@@ -819,6 +843,8 @@ function toGuestRecord(guest: Guest): GuestRecord {
     name: guest.name,
     group: guest.group ?? '',
     email: guest.email ?? '',
+    phone: guest.phone ?? '',
+    maxAttendees: guest.maxAttendees ?? 21,
     status: guest.rsvpStatus === 'attending' ? 'Confirmed'
       : guest.rsvpStatus === 'maybe' ? 'Maybe'
         : guest.rsvpStatus === 'declined' ? 'Declined' : 'Pending',
@@ -828,6 +854,8 @@ function toGuestRecord(guest: Guest): GuestRecord {
 function AddGuestModal({ initial, onClose, onAdd }: { initial?: GuestRecord; onClose: () => void; onAdd: (guest: GuestRecord) => Promise<void> }) {
   const [name, setName] = useState(initial?.name ?? '');
   const [email, setEmail] = useState(initial?.email ?? '');
+  const [phone, setPhone] = useState(initial?.phone ?? '');
+  const [maxAttendees, setMaxAttendees] = useState(String(initial?.maxAttendees ?? 21));
   const [group, setGroup] = useState(initial?.group ?? 'Friends');
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
@@ -838,11 +866,19 @@ function AddGuestModal({ initial, onClose, onAdd }: { initial?: GuestRecord; onC
         <h2 id="add-guest-title">{initial ? 'Update your guest.' : 'Add someone lovely.'}</h2><p className="modal-description">{initial ? 'Keep their contact and group details up to date.' : 'They’ll be part of the celebration before you know it.'}</p>
         <form className="event-form" onSubmit={async (event) => {
           event.preventDefault();
-          if (!name.trim() || !email.trim()) { setError('Please add their name and email address.'); return; }
+          if (!name.trim()) { setError('Please add their name.'); return; }
           setSaving(true);
           setError('');
           try {
-            await onAdd({ ...initial, name: name.trim(), email: email.trim(), group, status: initial?.status ?? 'Pending' });
+            await onAdd({
+              ...initial,
+              name: name.trim(),
+              email: email.trim(),
+              phone: phone.trim(),
+              maxAttendees: Number(maxAttendees),
+              group,
+              status: initial?.status ?? 'Pending',
+            });
           } catch (cause) {
             setError(cause instanceof Error ? cause.message : 'Unable to add this guest. Please try again.');
           } finally {
@@ -850,7 +886,9 @@ function AddGuestModal({ initial, onClose, onAdd }: { initial?: GuestRecord; onC
           }
         }}>
           <label>Guest’s name<input autoFocus placeholder="e.g. Ananya Sharma" value={name} onChange={(event) => setName(event.target.value)} /></label>
-          <label>Email address<input type="email" placeholder="name@example.com" value={email} onChange={(event) => setEmail(event.target.value)} /></label>
+          <label>Email address (optional)<input type="email" placeholder="name@example.com" value={email} onChange={(event) => setEmail(event.target.value)} /></label>
+          <label>Phone number (optional)<input type="tel" autoComplete="tel" placeholder="+91 98765 43210" value={phone} onChange={(event) => setPhone(event.target.value)} /></label>
+          <label>Maximum invited attendees<input type="number" min="1" max="21" required value={maxAttendees} onChange={(event) => setMaxAttendees(event.target.value)} /></label>
           <label>Add them to a group<select value={group} onChange={(event) => setGroup(event.target.value)}><option>Friends</option><option>Bride’s family</option><option>Groom’s family</option><option>Colleagues</option><option>Other</option></select></label>
           {error && <p className="form-error" role="alert">{error}</p>}
           <div className="modal-actions"><button type="button" className="button button--quiet" onClick={onClose} disabled={saving}>Cancel</button><button type="submit" className="button button--primary" disabled={saving}>{saving ? 'Saving…' : <>{initial ? 'Save changes' : 'Add to your guest list'} <span>→</span></>}</button></div>
@@ -2317,8 +2355,10 @@ function VendorResourceModal({
 
 export function GuestInvitationPage() {
   const { token } = useParams();
+  const navigate = useNavigate();
   const [response, setResponse] = useState('');
   const [partySize, setPartySize] = useState('1');
+  const [dietaryNotes, setDietaryNotes] = useState('');
   const [selectedFunctionIds, setSelectedFunctionIds] = useState<string[]>([]);
   const [submitted, setSubmitted] = useState(false);
   const [invitation, setInvitation] = useState<GuestInvitation | null>(null);
@@ -2336,6 +2376,7 @@ export function GuestInvitationPage() {
       .then((result) => {
         if (active) {
           setInvitation(result);
+          setPartySize(String(result.plusOnes + 1));
           setSelectedFunctionIds(
             result.functions
               .filter((item) => item.status !== 'pending')
@@ -2351,7 +2392,12 @@ export function GuestInvitationPage() {
         }
       })
       .catch((cause: unknown) => {
-        if (active) setError(cause instanceof Error ? cause.message : 'Unable to load this invitation.');
+        if (!active) return;
+        if (token && isAxiosError(cause) && cause.response?.status === 404) {
+          navigate(`/invitation/${encodeURIComponent(token)}`, { replace: true });
+          return;
+        }
+        setError(cause instanceof Error ? cause.message : 'Unable to load this invitation.');
       })
       .finally(() => {
         if (active) setLoading(false);
@@ -2359,7 +2405,7 @@ export function GuestInvitationPage() {
     return () => {
       active = false;
     };
-  }, [token]);
+  }, [navigate, token]);
   const submitRsvp = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!token || !invitation || !response) return;
@@ -2375,6 +2421,7 @@ export function GuestInvitationPage() {
         invitationToken: token,
         status: response === 'joyfully' ? 'attending' : response === 'maybe' ? 'maybe' : 'declined',
         plusOnes: response === 'joyfully' ? Math.max(Number(partySize) - 1, 0) : 0,
+        dietaryNotes: dietaryNotes.trim() || undefined,
         functionIds: selectedFunctionIds,
       });
       setSubmitted(true);
@@ -2414,13 +2461,67 @@ export function GuestInvitationPage() {
                 <span><strong>{item.name}</strong><small>{formatDate(item.date)}{item.venue ? ` · ${item.venue}` : ''}</small></span>
               </label>)}
             </fieldset>}
-            {response === 'joyfully' && <label>How many will be joining you?<select value={partySize} onChange={(event) => setPartySize(event.target.value)}><option value="1">Just me</option><option value="2">Two of us</option><option value="3">Three of us</option><option value="4">Four of us</option></select></label>}
+            {response === 'joyfully' && <label>How many will be joining you?<select value={partySize} onChange={(event) => setPartySize(event.target.value)}>{Array.from({ length: invitation.maxAttendees }, (_, index) => index + 1).map((count) => <option key={count} value={count}>{count === 1 ? 'Just me' : `${count} attendees`}</option>)}</select></label>}
+            <label>Dietary needs (optional)<textarea maxLength={2000} value={dietaryNotes} onChange={(event) => setDietaryNotes(event.currentTarget.value)} /></label>
             {error && <p className="form-error" role="alert">{error}</p>}
             <button type="submit" className="button button--primary guest-rsvp-submit" disabled={!response || submitting}>{submitting ? 'Sending…' : 'Send your RSVP with love →'}</button>
-            <small className="guest-token-note">Invitation {token ? `#${token.slice(0, 8)}` : ''}</small>
           </form>
         </div>
-      </section> : <section className="guest-thank-you"><span>✿</span><p className="eyebrow">YOUR REPLY IS SAFELY WITH US</p><h1>{response === 'joyfully' ? 'We can’t wait to see you.' : response === 'maybe' ? 'Thank you for letting us know.' : 'You’ll be there in spirit.'}</h1><p>Thank you, {invitation.guestName}. We’re so glad you could reply.</p>{response === 'joyfully' && <small>{partySize === '1' ? 'Just you' : `${partySize} guests`} joining the celebration</small>}<div className="guest-thank-you-signature">With love,<br /><strong>{invitation.event.name}</strong></div></section>)}
+      </section> : <section className="guest-thank-you"><span>✿</span><p className="eyebrow">YOUR REPLY IS SAFELY WITH US</p><h1>{response === 'joyfully' ? 'We can’t wait to see you.' : response === 'maybe' ? 'Thank you for letting us know.' : 'You’ll be there in spirit.'}</h1><p>Thank you, {invitation.guestName}. We’re so glad you could reply.</p>{response === 'joyfully' && <><small>{partySize === '1' ? 'Just you' : `${partySize} attendees`} joining the celebration</small><p>{invitation.functions.filter((item) => selectedFunctionIds.includes(item.id)).map((item) => item.name).join(', ')}</p></>}<div className="guest-thank-you-signature">With love,<br /><strong>{invitation.event.name}</strong></div><button type="button" className="button button--outline" onClick={() => setSubmitted(false)}>Change your RSVP</button></section>)}
+      <footer className="guest-portal-footer">MADE WITH LOVE, SHARED WITH UTSAV <span>✦</span></footer>
+    </main>
+  );
+}
+
+export function PublicDigitalInvitationPage() {
+  const { token } = useParams();
+  const [invitation, setInvitation] = useState<Awaited<ReturnType<typeof invitationsApi.getPublicByToken>> | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    let active = true;
+    if (!token) {
+      setError('This invitation link is missing its token.');
+      setLoading(false);
+      return;
+    }
+    invitationsApi.getPublicByToken(token)
+      .then((result) => {
+        if (active) setInvitation(result);
+      })
+      .catch((cause: unknown) => {
+        if (active) setError(cause instanceof Error ? cause.message : 'Unable to load this invitation.');
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [token]);
+
+  const design = invitation?.design ?? {};
+  const names = typeof design.names === 'string' ? design.names : invitation?.event.name;
+  const message = typeof design.message === 'string' ? design.message : '';
+
+  return (
+    <main className="guest-portal">
+      <div className="guest-portal-brand"><span className="brand-mark">u</span><span className="brand-word">utsav<span>.</span></span></div>
+      {loading && <section className="guest-thank-you"><p role="status">Loading your invitation…</p></section>}
+      {!loading && error && <section className="guest-thank-you"><p className="form-error" role="alert">{error}</p></section>}
+      {!loading && invitation && <section className="guest-invitation-card">
+        <div className="guest-invitation-art">
+          <span>TOGETHER WITH THEIR FAMILIES</span><i>✿</i><h1>{names}</h1>
+          <b>{invitation.title}</b><strong>{invitation.event.name}</strong>
+          <small>{formatDate(invitation.event.date)}{invitation.event.venue ? ` · ${invitation.event.venue}` : ''}</small>
+        </div>
+        <div className="guest-invitation-content">
+          {message && <p>{message}</p>}
+          <div className="guest-event-details"><span><small>THE DAY</small><strong>{formatDate(invitation.event.date)}</strong></span><span><small>THE PLACE</small><strong>{invitation.event.location || invitation.event.venue || 'Details to follow'}</strong></span></div>
+          {invitation.event.functions.length > 0 && <section><h2>Celebration details</h2>{invitation.event.functions.map((item) => <p key={`${item.name}-${item.date}`}><strong>{item.name}</strong> · {formatDate(item.date)}{item.venue ? ` · ${item.venue}` : ''}</p>)}</section>}
+        </div>
+      </section>}
       <footer className="guest-portal-footer">MADE WITH LOVE, SHARED WITH UTSAV <span>✦</span></footer>
     </main>
   );
