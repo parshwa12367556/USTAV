@@ -38,6 +38,8 @@ from app.models.vendor_staff import (
     VendorMembershipPermission,
     VendorStaffInvitation,
 )
+from app.models.file_asset import FileAsset
+from app.models.file_asset import FileAsset
 
 __all__ = [
     "AuditLog",
