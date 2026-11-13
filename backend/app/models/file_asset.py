@@ -1,7 +1,8 @@
 from app.extensions import db
 from app.models.base import BaseModel
+from datetime import datetime, timezone
 from sqlalchemy import UniqueConstraint
-import uuid
+from uuid import uuid4
 
 
 class FileAsset(BaseModel):
@@ -54,4 +55,3 @@ class FileAsset(BaseModel):
         db.Index("ix_file_assets_uploaded_by", "uploaded_by"),
         db.Index("ix_file_assets_scan_status", "scan_status"),
     )
-EOF

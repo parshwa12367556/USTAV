@@ -1,0 +1,461 @@
+WARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.
+ * Running on http://127.0.0.1:5000
+Press CTRL+C to quit
+ * Restarting with watchdog (windowsapi)
+ * Debugger is active!
+ * Debugger PIN: 973-081-907
+127.0.0.1 - - [13/Nov/2026 08:31:14] "GET /api/v1/health HTTP/1.1" 200 -
+ * Detected change in 'D:\\UTSAV\\backend\\app\\services\\match_quotes.py', reloading
+ * Restarting with watchdog (windowsapi)
+ * Debugger is active!
+ * Debugger PIN: 973-081-907
+ * Detected change in 'D:\\UTSAV\\backend\\verify_migrations.py', reloading
+ * Restarting with watchdog (windowsapi)
+ * Debugger is active!
+ * Debugger PIN: 973-081-907
+ * Detected change in 'D:\\UTSAV\\backend\\verify_migrations.py', reloading
+ * Restarting with watchdog (windowsapi)
+ * Debugger is active!
+ * Debugger PIN: 973-081-907
+ * Detected change in 'D:\\UTSAV\\backend\\verify_migrations.py', reloading
+ * Restarting with watchdog (windowsapi)
+ * Debugger is active!
+ * Debugger PIN: 973-081-907
+ * Detected change in 'D:\\UTSAV\\backend\\verify_migrations.py', reloading
+ * Restarting with watchdog (windowsapi)
+ * Debugger is active!
+ * Debugger PIN: 973-081-907
+ * Detected change in 'D:\\UTSAV\\backend\\verify_migrations.py', reloading
+ * Restarting with watchdog (windowsapi)
+ * Debugger is active!
+ * Debugger PIN: 973-081-907
+ * Detected change in 'D:\\UTSAV\\backend\\verify_migrations.py', reloading
+ * Restarting with watchdog (windowsapi)
+ * Debugger is active!
+ * Debugger PIN: 973-081-907
+ * Detected change in 'D:\\UTSAV\\backend\\create_backup.py', reloading
+ * Restarting with watchdog (windowsapi)
+ * Debugger is active!
+ * Debugger PIN: 973-081-907
+ * Detected change in 'D:\\UTSAV\\backend\\app\\models\\file_asset.py', reloading
+ * Restarting with watchdog (windowsapi)
+ * Debugger is active!
+ * Debugger PIN: 973-081-907
+ * Detected change in 'D:\\UTSAV\\backend\\verify_database.py', reloading
+ * Restarting with watchdog (windowsapi)
+ * Debugger is active!
+ * Debugger PIN: 973-081-907
+ * Detected change in 'D:\\UTSAV\\backend\\verify_missing.py', reloading
+ * Restarting with watchdog (windowsapi)
+ * Debugger is active!
+ * Debugger PIN: 973-081-907
+ * Detected change in 'D:\\UTSAV\\backend\\verify_migrations.py', reloading
+ * Restarting with watchdog (windowsapi)
+ * Debugger is active!
+ * Debugger PIN: 973-081-907
+ * Detected change in 'D:\\UTSAV\\backend\\verify_baseline.py', reloading
+ * Restarting with watchdog (windowsapi)
+ * Debugger is active!
+ * Debugger PIN: 973-081-907
+ * Detected change in 'D:\\UTSAV\\backend\\verify_fileasset.py', reloading
+ * Restarting with watchdog (windowsapi)
+ * Debugger is active!
+ * Debugger PIN: 973-081-907
+ * Detected change in 'D:\\UTSAV\\backend\\final_report.py', reloading
+ * Restarting with watchdog (windowsapi)
+ * Debugger is active!
+ * Debugger PIN: 973-081-907
+ * Detected change in 'C:\\Users\\Parsh\\AppData\\Local\\Programs\\Python\\Python314\\Lib\\site-packages\\typing_extensions.py', reloading
+ * Restarting with watchdog (windowsapi)
+ * Debugger is active!
+ * Debugger PIN: 973-081-907
+ * Detected change in 'D:\\UTSAV\\backend\\final_report.py', reloading
+ * Restarting with watchdog (windowsapi)
+ * Debugger is active!
+ * Debugger PIN: 973-081-907
+ * Detected change in 'D:\\UTSAV\\backend\\final_report.py', reloading
+ * Restarting with watchdog (windowsapi)
+ * Debugger is active!
+ * Debugger PIN: 973-081-907
+ * Detected change in 'D:\\UTSAV\\backend\\final_report.py', reloading
+ * Restarting with watchdog (windowsapi)
+ * Debugger is active!
+ * Debugger PIN: 973-081-907
+ * Detected change in 'D:\\UTSAV\\backend\\final_report.py', reloading
+ * Restarting with watchdog (windowsapi)
+ * Debugger is active!
+ * Debugger PIN: 973-081-907
+ * Detected change in 'D:\\UTSAV\\backend\\final_report.py', reloading
+ * Restarting with watchdog (windowsapi)
+ * Debugger is active!
+ * Debugger PIN: 973-081-907
+ * Detected change in 'D:\\UTSAV\\backend\\final_report.py', reloading
+ * Restarting with watchdog (windowsapi)
+ * Debugger is active!
+ * Debugger PIN: 973-081-907
+ * Detected change in 'D:\\UTSAV\\backend\\final_report.py', reloading
+ * Restarting with watchdog (windowsapi)
+ * Debugger is active!
+ * Debugger PIN: 973-081-907
+ * Detected change in 'D:\\UTSAV\\backend\\final_report.py', reloading
+ * Restarting with watchdog (windowsapi)
+ * Debugger is active!
+ * Debugger PIN: 973-081-907
+ * Detected change in 'D:\\UTSAV\\backend\\final_report.py', reloading
+ * Restarting with watchdog (windowsapi)
+ * Debugger is active!
+ * Debugger PIN: 973-081-907
+ * Detected change in 'D:\\UTSAV\\backend\\final_report.py', reloading
+ * Restarting with watchdog (windowsapi)
+ * Debugger is active!
+ * Debugger PIN: 973-081-907
+ * Detected change in 'D:\\UTSAV\\backend\\final_report.py', reloading
+ * Restarting with watchdog (windowsapi)
+ * Debugger is active!
+ * Debugger PIN: 973-081-907
+ * Detected change in 'D:\\UTSAV\\backend\\final_report.py', reloading
+ * Restarting with watchdog (windowsapi)
+ * Debugger is active!
+ * Debugger PIN: 973-081-907
+ * Detected change in 'D:\\UTSAV\\backend\\final_report.py', reloading
+ * Restarting with watchdog (windowsapi)
+ * Debugger is active!
+ * Debugger PIN: 973-081-907
+ * Detected change in 'D:\\UTSAV\\backend\\final_report.py', reloading
+ * Restarting with watchdog (windowsapi)
+ * Debugger is active!
+ * Debugger PIN: 973-081-907
+ * Detected change in 'D:\\UTSAV\\backend\\task1_db_verify.py', reloading
+ * Restarting with watchdog (windowsapi)
+ * Debugger is active!
+ * Debugger PIN: 973-081-907
+ * Detected change in 'D:\\UTSAV\\backend\\task1_db_verify.py', reloading
+ * Restarting with watchdog (windowsapi)
+ * Debugger is active!
+ * Debugger PIN: 973-081-907
+ * Detected change in 'D:\\UTSAV\\backend\\task1_db_verify.py', reloading
+ * Restarting with watchdog (windowsapi)
+ * Debugger is active!
+ * Debugger PIN: 973-081-907
+ * Detected change in 'D:\\UTSAV\\backend\\task1_db_verify.py', reloading
+ * Restarting with watchdog (windowsapi)
+ * Debugger is active!
+ * Debugger PIN: 973-081-907
+ * Detected change in 'D:\\UTSAV\\backend\\task7_backup.py', reloading
+ * Restarting with watchdog (windowsapi)
+ * Debugger is active!
+ * Debugger PIN: 973-081-907
+ * Detected change in 'D:\\UTSAV\\backend\\check_columns.py', reloading
+ * Restarting with watchdog (windowsapi)
+ * Debugger is active!
+ * Debugger PIN: 973-081-907
+ * Detected change in 'D:\\UTSAV\\backend\\check_columns.py', reloading
+ * Detected change in 'D:\\UTSAV\\backend\\check_columns.py', reloading
+ * Restarting with watchdog (windowsapi)
+ * Debugger is active!
+ * Debugger PIN: 973-081-907
+ * Detected change in 'C:\\Users\\Parsh\\AppData\\Local\\Programs\\Python\\Python314\\Lib\\site-packages\\dotenv\\main.py', reloading
+ * Restarting with watchdog (windowsapi)
+ * Debugger is active!
+ * Debugger PIN: 973-081-907
+ * Detected change in 'D:\\UTSAV\\backend\\app\\__init__.py', reloading
+ * Restarting with watchdog (windowsapi)
+ * Debugger is active!
+ * Debugger PIN: 973-081-907
+ * Detected change in 'D:\\UTSAV\\backend\\task1_alembic_map.py', reloading
+ * Restarting with watchdog (windowsapi)
+ * Debugger is active!
+ * Debugger PIN: 973-081-907
+ * Detected change in 'C:\\Users\\Parsh\\AppData\\Local\\Programs\\Python\\Python314\\Lib\\site-packages\\alembic\\script\\__init__.py', reloading
+ * Restarting with watchdog (windowsapi)
+ * Debugger is active!
+ * Debugger PIN: 973-081-907
+ * Detected change in 'D:\\UTSAV\\backend\\task1_alembic_map.py', reloading
+ * Restarting with watchdog (windowsapi)
+ * Debugger is active!
+ * Debugger PIN: 973-081-907
+ * Detected change in 'D:\\UTSAV\\backend\\task1_alembic_map.py', reloading
+ * Restarting with watchdog (windowsapi)
+ * Debugger is active!
+ * Debugger PIN: 973-081-907
+ * Detected change in 'D:\\UTSAV\\backend\\task1_alembic_map.py', reloading
+ * Restarting with watchdog (windowsapi)
+ * Debugger is active!
+ * Debugger PIN: 973-081-907
+ * Detected change in 'D:\\UTSAV\\backend\\task1_alembic_map.py', reloading
+ * Restarting with watchdog (windowsapi)
+ * Debugger is active!
+ * Debugger PIN: 973-081-907
+ * Detected change in 'D:\\UTSAV\\backend\\task2_schema_inspect.py', reloading
+ * Restarting with watchdog (windowsapi)
+ * Debugger is active!
+ * Debugger PIN: 973-081-907
+ * Detected change in 'D:\\UTSAV\\backend\\task2_schema_inspect.py', reloading
+ * Restarting with watchdog (windowsapi)
+ * Debugger is active!
+ * Debugger PIN: 973-081-907
+ * Detected change in 'D:\\UTSAV\\backend\\task2_schema_inspect.py', reloading
+ * Restarting with watchdog (windowsapi)
+ * Debugger is active!
+ * Debugger PIN: 973-081-907
+ * Detected change in 'D:\\UTSAV\\backend\\task2_table_count.py', reloading
+ * Restarting with watchdog (windowsapi)
+ * Debugger is active!
+ * Debugger PIN: 973-081-907
+ * Detected change in 'D:\\UTSAV\\backend\\task2_table_count.py', reloading
+ * Restarting with watchdog (windowsapi)
+ * Debugger is active!
+ * Debugger PIN: 973-081-907
+ * Detected change in 'D:\\UTSAV\\backend\\task2_table_count.py', reloading
+ * Restarting with watchdog (windowsapi)
+ * Debugger is active!
+ * Debugger PIN: 973-081-907
+ * Detected change in 'D:\\UTSAV\\backend\\task2_table_count.py', reloading
+ * Restarting with watchdog (windowsapi)
+ * Debugger is active!
+ * Debugger PIN: 973-081-907
+ * Detected change in 'D:\\UTSAV\\backend\\app\\services\\match_quotes.py', reloading
+ * Restarting with watchdog (windowsapi)
+ * Debugger is active!
+ * Debugger PIN: 973-081-907
+ * Detected change in 'D:\\UTSAV\\backend\\task1_db_verify.py', reloading
+ * Restarting with watchdog (windowsapi)
+ * Debugger is active!
+ * Debugger PIN: 973-081-907
+ * Detected change in 'D:\\UTSAV\\backend\\app\\models\\file_asset.py', reloading
+ * Restarting with watchdog (windowsapi)
+ * Debugger is active!
+ * Debugger PIN: 973-081-907
+ * Detected change in 'D:\\UTSAV\\backend\\phaseA_preflight.py', reloading
+ * Restarting with watchdog (windowsapi)
+ * Debugger is active!
+ * Debugger PIN: 973-081-907
+127.0.0.1 - - [13/Nov/2026 09:59:42] "GET /favicon.ico HTTP/1.1" 404 -
+127.0.0.1 - - [13/Nov/2026 09:59:45] "GET / HTTP/1.1" 404 -
+127.0.0.1 - - [13/Nov/2026 10:00:01] "GET /api/v1/auth/me HTTP/1.1" 401 -
+127.0.0.1 - - [13/Nov/2026 10:00:01] "GET /api/v1/auth/me HTTP/1.1" 401 -
+127.0.0.1 - - [13/Nov/2026 10:00:01] "OPTIONS /api/v1/auth/refresh HTTP/1.1" 200 -
+ * Detected change in 'C:\\Users\\Parsh\\AppData\\Local\\Programs\\Python\\Python314\\Lib\\site-packages\\flask_jwt_extended\\view_decorators.py', reloading
+[2026-11-13 10:00:01,252] ERROR in middleware: Unhandled request error
+Traceback (most recent call last):
+  File "C:\Users\Parsh\AppData\Local\Programs\Python\Python314\Lib\site-packages\sqlalchemy\orm\mapper.py", line 2532, in get_property
+    return self._props[key]
+           ~~~~~~~~~~~^^^^^
+KeyError: 'items'
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "C:\Users\Parsh\AppData\Local\Programs\Python\Python314\Lib\site-packages\flask\app.py", line 917, in full_dispatch_request
+    rv = self.dispatch_request()
+  File "C:\Users\Parsh\AppData\Local\Programs\Python\Python314\Lib\site-packages\flask\app.py", line 902, in dispatch_request
+    return self.ensure_sync(self.view_functions[rule.endpoint])(**view_args)  # type: ignore[no-any-return]
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^
+  File "C:\Users\Parsh\AppData\Local\Programs\Python\Python314\Lib\site-packages\flask_jwt_extended\view_decorators.py", line 167, in decorator
+    verify_jwt_in_request(
+    ~~~~~~~~~~~~~~~~~~~~~^
+        optional, fresh, refresh, locations, verify_type, skip_revocation_check
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "C:\Users\Parsh\AppData\Local\Programs\Python\Python314\Lib\site-packages\flask_jwt_extended\view_decorators.py", line 94, in verify_jwt_in_request
+    jwt_data, jwt_header, jwt_location = _decode_jwt_from_request(
+                                         ~~~~~~~~~~~~~~~~~~~~~~~~^
+        locations,
+        ^^^^^^^^^^
+    ...<3 lines>...
+        skip_revocation_check=skip_revocation_check,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "C:\Users\Parsh\AppData\Local\Programs\Python\Python314\Lib\site-packages\flask_jwt_extended\view_decorators.py", line 368, in _decode_jwt_from_request
+    verify_token_not_blocklisted(jwt_header, decoded_token)
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Parsh\AppData\Local\Programs\Python\Python314\Lib\site-packages\flask_jwt_extended\internal_utils.py", line 58, in verify_token_not_blocklisted
+    if jwt_manager._token_in_blocklist_callback(jwt_header, jwt_data):
+       ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\UTSAV\backend\app\__init__.py", line 147, in reject_inactive_or_stale_role
+    user = db.session.get(User, jwt_payload.get("sub"))
+  File "C:\Users\Parsh\AppData\Local\Programs\Python\Python314\Lib\site-packages\sqlalchemy\orm\scoping.py", line 1043, in get
+    return self._proxied.get(
+           ~~~~~~~~~~~~~~~~~^
+        entity,
+        ^^^^^^^
+    ...<6 lines>...
+        bind_arguments=bind_arguments,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "C:\Users\Parsh\AppData\Local\Programs\Python\Python314\Lib\site-packages\sqlalchemy\orm\session.py", line 3702, in get
+    return self._get_impl(
+           ~~~~~~~~~~~~~~^
+        entity,
+        ^^^^^^^
+    ...<7 lines>...
+        bind_arguments=bind_arguments,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "C:\Users\Parsh\AppData\Local\Programs\Python\Python314\Lib\site-packages\sqlalchemy\orm\session.py", line 3881, in _get_impl
+    return db_load_fn(
+        self,
+    ...<5 lines>...
+        bind_arguments=bind_arguments,
+    )
+  File "C:\Users\Parsh\AppData\Local\Programs\Python\Python314\Lib\site-packages\sqlalchemy\orm\loading.py", line 695, in load_on_pk_identity
+    session.execute(
+    ~~~~~~~~~~~~~~~^
+        q,
+        ^^
+    ...<2 lines>...
+        bind_arguments=bind_arguments,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "C:\Users\Parsh\AppData\Local\Programs\Python\Python314\Lib\site-packages\sqlalchemy\orm\session.py", line 2373, in execute
+    return self._execute_internal(
+           ~~~~~~~~~~~~~~~~~~~~~~^
+        statement,
+        ^^^^^^^^^^
+    ...<4 lines>...
+        _add_event=_add_event,
+        ^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "C:\Users\Parsh\AppData\Local\Programs\Python\Python314\Lib\site-packages\sqlalchemy\orm\session.py", line 2271, in _execute_internal
+    result: Result[Any] = compile_state_cls.orm_execute_statement(
+                          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+        self,
+        ^^^^^
+    ...<4 lines>...
+        conn,
+        ^^^^^
+    )
+    ^
+  File "C:\Users\Parsh\AppData\Local\Programs\Python\Python314\Lib\site-packages\sqlalchemy\orm\context.py", line 306, in orm_execute_statement
+    result = conn.execute(
+        statement, params or {}, execution_options=execution_options
+    )
+  File "C:\Users\Parsh\AppData\Local\Programs\Python\Python314\Lib\site-packages\sqlalchemy\engine\base.py", line 1421, in execute
+    return meth(
+        self,
+        distilled_parameters,
+        execution_options or NO_OPTIONS,
+    )
+  File "C:\Users\Parsh\AppData\Local\Programs\Python\Python314\Lib\site-packages\sqlalchemy\sql\elements.py", line 526, in _execute_on_connection
+    return connection._execute_clauseelement(
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+        self, distilled_params, execution_options
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "C:\Users\Parsh\AppData\Local\Programs\Python\Python314\Lib\site-packages\sqlalchemy\engine\base.py", line 1635, in _execute_clauseelement
+    compiled_sql, extracted_params, cache_hit = elem._compile_w_cache(
+                                                ~~~~~~~~~~~~~~~~~~~~~^
+        dialect=dialect,
+        ^^^^^^^^^^^^^^^^
+    ...<4 lines>...
+        linting=self.dialect.compiler_linting | compiler.WARN_LINTING,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "C:\Users\Parsh\AppData\Local\Programs\Python\Python314\Lib\site-packages\sqlalchemy\sql\elements.py", line 715, in _compile_w_cache
+    compiled_sql = self._compiler(
+        dialect,
+    ...<4 lines>...
+        **kw,
+    )
+  File "C:\Users\Parsh\AppData\Local\Programs\Python\Python314\Lib\site-packages\sqlalchemy\sql\elements.py", line 323, in _compiler
+    return dialect.statement_compiler(dialect, self, **kw)
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Parsh\AppData\Local\Programs\Python\Python314\Lib\site-packages\sqlalchemy\sql\compiler.py", line 1462, in __init__
+    Compiled.__init__(self, dialect, statement, **kwargs)
+    ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Parsh\AppData\Local\Programs\Python\Python314\Lib\site-packages\sqlalchemy\sql\compiler.py", line 902, in __init__
+    self.string = self.process(self.statement, **compile_kwargs)
+                  ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Parsh\AppData\Local\Programs\Python\Python314\Lib\site-packages\sqlalchemy\sql\compiler.py", line 948, in process
+    return obj._compiler_dispatch(self, **kwargs)
+           ~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^
+  File "C:\Users\Parsh\AppData\Local\Programs\Python\Python314\Lib\site-packages\sqlalchemy\sql\visitors.py", line 138, in _compiler_dispatch
+    return meth(self, **kw)  # type: ignore  # noqa: E501
+  File "C:\Users\Parsh\AppData\Local\Programs\Python\Python314\Lib\site-packages\sqlalchemy\sql\compiler.py", line 4811, in visit_select
+    compile_state = select_stmt._compile_state_factory(
+        select_stmt, self, **kwargs
+    )
+  File "C:\Users\Parsh\AppData\Local\Programs\Python\Python314\Lib\site-packages\sqlalchemy\sql\base.py", line 774, in create_for_statement
+    return klass.create_for_statement(statement, compiler, **kw)
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Parsh\AppData\Local\Programs\Python\Python314\Lib\site-packages\sqlalchemy\orm\context.py", line 447, in create_for_statement
+    return cls._create_orm_context(
+           ~~~~~~~~~~~~~~~~~~~~~~~^
+        cast("Union[Select, FromStatement]", statement),
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<2 lines>...
+        **kw,
+        ^^^^^
+    )
+    ^
+  File "C:\Users\Parsh\AppData\Local\Programs\Python\Python314\Lib\site-packages\sqlalchemy\orm\context.py", line 1175, in _create_orm_context
+    _QueryEntity.to_compile_state(
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+        self,
+        ^^^^^
+    ...<2 lines>...
+        is_current_entities=True,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "C:\Users\Parsh\AppData\Local\Programs\Python\Python314\Lib\site-packages\sqlalchemy\orm\context.py", line 2628, in to_compile_state
+    _MapperEntity(
+    ~~~~~~~~~~~~~^
+        compile_state,
+        ^^^^^^^^^^^^^^
+    ...<2 lines>...
+        is_current_entities,
+        ^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "C:\Users\Parsh\AppData\Local\Programs\Python\Python314\Lib\site-packages\sqlalchemy\orm\context.py", line 2708, in __init__
+    entity._post_inspect
+  File "C:\Users\Parsh\AppData\Local\Programs\Python\Python314\Lib\site-packages\sqlalchemy\util\langhelpers.py", line 1234, in __get__
+    obj.__dict__[self.__name__] = result = self.fget(obj)
+                                           ~~~~~~~~~^^^^^
+  File "C:\Users\Parsh\AppData\Local\Programs\Python\Python314\Lib\site-packages\sqlalchemy\orm\mapper.py", line 2734, in _post_inspect
+    self._check_configure()
+    ~~~~~~~~~~~~~~~~~~~~~^^
+  File "C:\Users\Parsh\AppData\Local\Programs\Python\Python314\Lib\site-packages\sqlalchemy\orm\mapper.py", line 2411, in _check_configure
+    _configure_registries({self.registry}, cascade=True)
+    ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Parsh\AppData\Local\Programs\Python\Python314\Lib\site-packages\sqlalchemy\orm\mapper.py", line 4228, in _configure_registries
+    _do_configure_registries(registries, cascade)
+    ~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Parsh\AppData\Local\Programs\Python\Python314\Lib\site-packages\sqlalchemy\orm\mapper.py", line 4269, in _do_configure_registries
+    mapper._post_configure_properties()
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^
+  File "C:\Users\Parsh\AppData\Local\Programs\Python\Python314\Lib\site-packages\sqlalchemy\orm\mapper.py", line 2428, in _post_configure_properties
+    prop.init()
+    ~~~~~~~~~^^
+  File "C:\Users\Parsh\AppData\Local\Programs\Python\Python314\Lib\site-packages\sqlalchemy\orm\interfaces.py", line 595, in init
+    self.do_init()
+    ~~~~~~~~~~~~^^
+  File "C:\Users\Parsh\AppData\Local\Programs\Python\Python314\Lib\site-packages\sqlalchemy\orm\relationships.py", line 1661, in do_init
+    self._generate_backref()
+    ~~~~~~~~~~~~~~~~~~~~~~^^
+  File "C:\Users\Parsh\AppData\Local\Programs\Python\Python314\Lib\site-packages\sqlalchemy\orm\relationships.py", line 2145, in _generate_backref
+    self._add_reverse_property(self.back_populates)
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Parsh\AppData\Local\Programs\Python\Python314\Lib\site-packages\sqlalchemy\orm\relationships.py", line 1592, in _add_reverse_property
+    other = self.mapper.get_property(key, _configure_mappers=False)
+  File "C:\Users\Parsh\AppData\Local\Programs\Python\Python314\Lib\site-packages\sqlalchemy\orm\mapper.py", line 2534, in get_property
+    raise sa_exc.InvalidRequestError(
+    ...<3 lines>...
+    ) from err
+sqlalchemy.exc.InvalidRequestError: Mapper 'Mapper[QuotationRequest(quotations)]' has no property 'items'.  If this property was indicated from other mappers or configure events, ensure registry.configure() has been called.
+127.0.0.1 - - [13/Nov/2026 10:00:01] "POST /api/v1/auth/refresh HTTP/1.1Fatal Python error: _enter_buffered_busy: could not acquire lock for <_io.BufferedWriter name='<stderr>'> at interpreter shutdown, possibly due to daemon threads
+Python runtime state: finalizing (tstate=0x00007ffdfbe15d30)
+
+Current thread 0x00004a10 (most recent call first):
+  <no Python frame>
+
+Extension modules: _cffi_backend, markupsafe._speedups, sqlalchemy.cyextension.collections, sqlalchemy.cyextension.immutabledict, sqlalchemy.cyextension.processors, sqlalchemy.cyextension.resultproxy, sqlalchemy.cyextension.util, greenlet._greenlet (total: 8)
