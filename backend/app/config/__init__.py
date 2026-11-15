@@ -121,6 +121,7 @@ class ProductionConfig(BaseConfig):
 
 
 class TestingConfig(BaseConfig):
+    AUTO_INIT_DATABASE = False
     DEBUG = False
     TESTING = True
     SECRET_KEY = "test-only-secret-key"

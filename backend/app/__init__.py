@@ -25,6 +25,20 @@ def create_app(config_name: str | None = None, overrides: dict[str, Any] | None 
     )
     if overrides:
         app.config.update(overrides)
+    if app.config.get("TESTING"):
+        from sqlalchemy.engine import make_url
+
+        test_url = make_url(app.config["SQLALCHEMY_DATABASE_URI"])
+        live_path = (Path(app.root_path).parent / "instance" / "utsav.db").resolve()
+        if test_url.get_backend_name() != "sqlite":
+            raise RuntimeError("Testing requires an isolated SQLite database.")
+        if test_url.query or (test_url.database not in (None, "", ":memory:") and (
+            not Path(test_url.database).is_absolute()
+            or Path(test_url.database).resolve() == live_path
+            or (live_path.exists() and Path(test_url.database).exists() and Path(test_url.database).samefile(live_path))
+            or (Path(app.root_path).parent / "instance" / "backups").resolve() in Path(test_url.database).resolve().parents
+        )):
+            raise RuntimeError("Unsafe test database target: use an absolute disposable SQLite path.")
     app.config["RATELIMIT_STORAGE_URI"] = app.config["RATE_LIMIT_STORAGE_URI"]
     if app.config["TRUSTED_PROXY_HOPS"] < 0:
         raise RuntimeError("TRUSTED_PROXY_HOPS cannot be negative.")
@@ -119,10 +133,10 @@ def create_app(config_name: str | None = None, overrides: dict[str, Any] | None 
         from sqlalchemy import inspect
 
         table_names = inspect(db.engine).get_table_names()
-        if not table_names:
+        if not table_names and app.config.get("AUTO_INIT_DATABASE", True):
             db.create_all()
             table_names = inspect(db.engine).get_table_names()
-        if "alembic_version" not in table_names:
+        if "alembic_version" not in table_names and app.config.get("AUTO_INIT_DATABASE", True):
             try:
                 migrate.stamp(revision="head")
             except Exception:

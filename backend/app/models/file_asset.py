@@ -1,7 +1,7 @@
 from app.extensions import db
 from app.models.base import BaseModel
 from datetime import datetime, timezone
-from sqlalchemy import UniqueConstraint
+from sqlalchemy.orm import synonym
 from uuid import uuid4
 
 
@@ -25,7 +25,7 @@ class FileAsset(BaseModel):
         db.String(36), db.ForeignKey("vendor_profiles.id", ondelete="SET NULL"), nullable=True, index=True
     )
     uploaded_by = db.Column(
-        db.String(36), db.ForeignKey("users.id", ondelete="SET NULL"), nullable=False
+        db.String(36), db.ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
     )
     uploaded_at = db.Column(
         db.DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc)
@@ -43,10 +43,11 @@ class FileAsset(BaseModel):
     )
 
     # Relationships
-    uploader = db.relationship("User", backref="uploaded_files")
+    uploader = db.relationship("User", foreign_keys=[uploaded_by], back_populates="uploaded_files")
+    deleter = db.relationship("User", foreign_keys=[deleted_by], back_populates="deleted_files")
     family = db.relationship("FamilyWorkspace", backref="file_assets")
     vendor = db.relationship("VendorProfile", backref="file_assets")
-    user = db.relationship("User", backref="uploaded_files")
+    user = synonym("uploader")
 
     __table_args__ = (
         db.Index("ix_file_assets_resource", "resource_type", "resource_id"),

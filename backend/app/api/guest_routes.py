@@ -399,19 +399,35 @@ def rotate_guest_invitation_token(guest_id: str):
     require_event_permission(
         get_jwt_identity(), guest.event, "guest.update", get_jwt().get("membership_id")
     )
+    return _issue_guest_invitation_token(guest, "guest.invitation_token_rotated")
+
+
+@guest_bp.post("/guests/<guest_id>/invitation-token/reissue")
+@jwt_required()
+def reissue_guest_invitation_token(guest_id: str):
+    guest = db.session.get(Guest, guest_id)
+    if guest is None:
+        raise ApiError("Guest not found.", 404)
+    user_id = get_jwt_identity()
+    require_event_permission(user_id, guest.event, "guest.update", get_jwt().get("membership_id"))
+    # Deliberate revocation can only be reversed by the owning family account,
+    # not by a delegated editor who can rotate ordinary invitation tokens.
+    if guest.event.owner_id != user_id or get_jwt().get("role") != "family" or _workspace_id(guest.event) is None:
+        raise ApiError("Only the family workspace owner can reissue a revoked invitation.", 403)
+    if guest.invitation_revoked_at is None:
+        raise ApiError("Only revoked invitations can be reissued; rotate an active invitation instead.", 409)
+    guest.invitation_revoked_at = None
+    return _issue_guest_invitation_token(guest, "guest.invitation_reissued")
+
+
+def _issue_guest_invitation_token(guest: Guest, audit_action: str):
     token = generate_bearer_token()
     guest.invitation_token_hash = hash_bearer_token(token)
-    # Preserve revocation state - if previously revoked, remain revoked
-    was_revoked = guest.invitation_revoked_at is not None
-    if was_revoked:
-        guest.invitation_revoked_at = datetime.now(timezone.utc)
-    else:
-        guest.invitation_revoked_at = None
     guest.invitation_expires_at = datetime.now(timezone.utc) + timedelta(
         days=current_app.config["INVITATION_TOKEN_EXPIRY_DAYS"]
     )
     record_security_event(
-        "guest.invitation_token_rotated",
+        audit_action,
         "succeeded",
         user_id=get_jwt_identity(),
         resource_type="guest",

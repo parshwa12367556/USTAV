@@ -11,6 +11,8 @@ class Event(BaseModel):
     event_type = db.Column(db.String(80), nullable=False)
     date = db.Column(db.Date, nullable=False, index=True)
     end_date = db.Column(db.Date, nullable=True)
+    venue = db.Column(db.String(255), nullable=True)
+    location = db.Column(db.String(255), nullable=True)
     rsvp_deadline = db.Column(db.DateTime(timezone=True), nullable=True, index=True)
     guest_count = db.Column(db.Integer, nullable=False, default=0)
     budget = db.Column(db.Numeric(12, 2), nullable=True)
@@ -41,7 +43,10 @@ class Event(BaseModel):
     def rsvp_deadline_passed(self) -> bool:
         if self.rsvp_deadline is None:
             return False
-        return self.rsvp_deadline <= datetime.now(timezone.utc)
+        deadline = self.rsvp_deadline
+        if deadline.tzinfo is None:
+            deadline = deadline.replace(tzinfo=timezone.utc)
+        return deadline <= datetime.now(timezone.utc)
 
 
 class Function(BaseModel):

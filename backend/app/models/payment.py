@@ -12,8 +12,8 @@ class Payment(BaseModel):
     status = db.Column(db.String(20), nullable=False, default="pending", index=True)
     paid_at = db.Column(db.DateTime(timezone=True), nullable=True)
     # Refund fields
-    refund_amount = db.Column(db.Numeric(12, 2), nullable=False, default=0)
-    refund_status = db.Column(db.String(20), nullable=False, default="pending")
+    refund_amount = db.Column(db.Numeric(12, 2), nullable=False, default=0, server_default="0")
+    refund_status = db.Column(db.String(20), nullable=False, default="pending", server_default="pending")
     refund_provider_reference = db.Column(db.String(120), nullable=True)
     refund_initiated_by = db.Column(db.String(36), nullable=True)
     refund_timestamp = db.Column(db.DateTime(timezone=True), nullable=True)

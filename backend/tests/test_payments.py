@@ -212,6 +212,7 @@ def test_razorpay_webhook_requires_signature_and_is_idempotent(client, app, auth
         transaction = db.session.scalar(db.select(Transaction))
         assert payment.status == "paid"
         assert transaction.status == "captured"
+        assert db.session.scalar(db.select(db.func.count()).select_from(Transaction)) == 1
 
 
 def test_payment_order_is_not_visible_to_another_family(client, app, auth_headers, monkeypatch):

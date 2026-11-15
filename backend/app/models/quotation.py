@@ -10,13 +10,18 @@ class QuotationRequest(BaseModel):
     title = db.Column(db.String(180), nullable=False)
     status = db.Column(db.String(20), nullable=False, default="draft", index=True)
     valid_until = db.Column(db.Date, nullable=True)
-    revision = db.Column(db.Integer, nullable=False, default=1)
+    revision = db.Column(db.Integer, nullable=False, default=1, server_default="1")
     previous_quotation_id = db.Column(db.String(36), db.ForeignKey("quotations.id", name="fk_quotation_previous"), nullable=True)
     revised_by = db.Column(db.String(36), nullable=True)
     revised_at = db.Column(db.DateTime(timezone=True), nullable=True)
-    requires_fresh_approval = db.Column(db.Boolean, nullable=False, default=False)
-    items_snapshot = db.Column(db.JSON, nullable=False, default=dict)
-    total_amount = db.Column(db.Numeric(12, 2), nullable=False, default=0)
+    requires_fresh_approval = db.Column(db.Boolean, nullable=False, default=False, server_default=db.false())
+    items_snapshot = db.Column(db.JSON, nullable=False, default=dict, server_default="{}")
+    total_amount = db.Column(db.Numeric(12, 2), nullable=False, default=0, server_default="0")
+
+    items = db.relationship(
+        "QuotationLineItem", back_populates="quotation",
+        foreign_keys="QuotationLineItem.quotation_id", cascade="all, delete-orphan",
+    )
 
 
 class QuotationLineItem(BaseModel):
@@ -26,4 +31,6 @@ class QuotationLineItem(BaseModel):
     description = db.Column(db.String(255), nullable=False)
     quantity = db.Column(db.Numeric(10, 2), nullable=False, default=1)
     unit_price = db.Column(db.Numeric(12, 2), nullable=False)
-    quotation = db.relationship("QuotationRequest", back_populates="items")
+    quotation = db.relationship(
+        "QuotationRequest", back_populates="items", foreign_keys=[quotation_id]
+    )

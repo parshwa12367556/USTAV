@@ -39,9 +39,9 @@ from app.models.vendor_staff import (
     VendorStaffInvitation,
 )
 from app.models.file_asset import FileAsset
-from app.models.file_asset import FileAsset
 
 __all__ = [
+    "FileAsset",
     "AuditLog",
     "Booking",
     "BookingStatusHistory",

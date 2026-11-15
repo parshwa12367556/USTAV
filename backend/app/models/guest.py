@@ -30,10 +30,10 @@ class Guest(BaseModel):
     max_attendees = db.Column(db.Integer, nullable=False, default=21)
     invitation_token_hash = db.Column(
         db.String(64),
-        unique=True,
         nullable=False,
         default=lambda: hash_bearer_token(generate_bearer_token()),
     )
+    __table_args__ = (db.Index("uq_guests_invitation_token_hash", "invitation_token_hash", unique=True),)
     invitation_revoked_at = db.Column(db.DateTime(timezone=True), nullable=True)
     invitation_expires_at = db.Column(
         db.DateTime(timezone=True),

@@ -1,0 +1,9 @@
+# Guest invitation token lifecycle
+
+`POST /api/v1/guests/<guest_id>/invitation-token/rotate` requires server-side `guest.update` access in the active family workspace (or event ownership for a token without membership context). It changes the bearer token and renews its expiry. Previous tokens become invalid. It **preserves deliberate revocation**; rotating a revoked invitation does not activate its new token.
+
+`POST /api/v1/guests/<guest_id>/invitation-token/reissue` is the explicit reactivation action, approved during T005. It requires both the existing event permission check and identity equal to the event's owning family account. Delegated editors cannot reissue, even with `guest.update`. The invitation must already be revoked, otherwise the response is 409 and the active invitation is unchanged. Successful reissue clears revocation, issues a fresh token, renews expiry and records `guest.invitation_reissued` without including the token in audit metadata. Unknown/out-of-scope guests return 404; an in-scope delegated editor receives 403. Authentication and active-account checks still apply.
+
+Both successful operations return the existing shape: `guestId`, `invitationToken`, `expiresAt`. The new token is disclosed only in that authenticated response. The database stores only its hash. `POST /api/v1/guests/<guest_id>/invitation-token/revoke` keeps its existing `guest.update` permission and revokes access. Public lookup returns 410 for a recognized revoked/expired invitation and 404 for an unknown/rotated-out token.
+
+This deliberately tightens T004's ordinary rotation behavior. Clients must call the explicit reissue action to reactivate revoked invitations. It adds no database fields or migration and grants no new delegated permission. Expiry renewal does not bypass event RSVP deadlines or attendance limits.

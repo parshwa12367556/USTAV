@@ -93,8 +93,15 @@ def test_guest_invitation_token_expires_and_can_be_revoked(client, auth_headers,
     )
     assert revoked.status_code == 200
     assert load_guest_invitation(client, rotated.json["invitationToken"]).status_code == 410
-    regenerated = issue_guest_link(client, auth_headers, guest["id"])
+    still_revoked = issue_guest_link(client, auth_headers, guest["id"])
     assert load_guest_invitation(client, rotated.json["invitationToken"]).status_code == 404
+    assert load_guest_invitation(client, still_revoked).status_code == 410
+    reissued = client.post(
+        f"/api/v1/guests/{guest['id']}/invitation-token/reissue", headers=auth_headers,
+    )
+    assert reissued.status_code == 200
+    regenerated = reissued.json["invitationToken"]
+    assert load_guest_invitation(client, still_revoked).status_code == 404
     assert load_guest_invitation(client, regenerated).status_code == 200
 
     with app.app_context():
