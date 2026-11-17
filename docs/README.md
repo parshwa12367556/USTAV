@@ -1,4 +1,4 @@
-# UTSAV documentation
+# USTAV documentation
 
 This documentation describes the current repository implementation. A described route or feature should not be read as proof of deployment readiness: production settings, provider accounts, legal approvals, and hosted infrastructure must be verified separately.
 
